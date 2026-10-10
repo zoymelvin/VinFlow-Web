@@ -1,0 +1,18 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "target": "es2020",
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "noEmit": false,
+    "outDir": ".tmp-tests",
+    "rootDir": ".",
+    "declaration": false,
+    "sourceMap": false,
+    "incremental": false,
+    "jsx": "react-jsx",
+    "types": ["node"]
+  },
+  "include": ["src/lib/settings.ts", "src/lib/insights/**/*.ts", "src/lib/history.ts", "src/lib/receipt.ts", "src/lib/budget.ts", "src/store/**/*.ts", "tests/**/*.ts"],
+  "exclude": ["node_modules", ".next", ".tmp-tests"]
+}

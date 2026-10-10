@@ -1,0 +1,407 @@
+"use client";
+
+import { useState, useEffect, useMemo } from "react";
+import { motion } from "framer-motion";
+import Link from "next/link";
+import {
+  ArrowLeft, Trophy, Check,
+  Coffee, Zap, ShoppingBag, Home, Receipt,
+  Smartphone, Building, LayoutGrid, Clock, Star,
+  Plus, Minus, Wallet
+} from "lucide-react";
+import { cn } from "@/lib/utils";
+import { Overlay, GrabHandle, Z } from "@/components/overlay";
+import Money from "@/components/Money";
+import { useFinanceStore, type Goal, type Transaction } from "@/store/useFinanceStore";
+import {
+  goalSavingsTotal, goalRemaining,
+  daysUntilDeadline,
+  goalSavingsForGoal, suggestedMonthlySaving
+} from "@/lib/goal";
+import Toast from "@/components/Toast";
+
+function catIcon(cat?: string) {
+  const map: Record<string, React.ElementType> = {
+    Food: Coffee,
+    Transport: Zap,
+    Shopping: ShoppingBag,
+    Rent: Home,
+    Hobby: Receipt,
+    "Data Plan": Smartphone,
+    Salary: Building,
+    Other: LayoutGrid,
+  };
+  return map[cat ?? ""] ?? Trophy;
+}
+
+function deadlineLabel(deadline?: string): string {
+  if (!deadline) return "No deadline";
+  const diff = daysUntilDeadline(deadline);
+  if (diff === Infinity) return "No deadline";
+  if (diff < 0) return "Overdue";
+  if (diff === 0) return "Due today";
+  if (diff === 1) return "Due tomorrow";
+  return `${diff} days left`;
+}
+
+function progressStatus(goal: Goal, saved: number) {
+  const pct = saved / goal.target;
+  if (goal.status === "archived") return { text: "Archived", color: "text-white/50", icon: Clock };
+  if (goal.status === "paused") return { text: "Paused", color: "text-yellow-400", icon: Clock };
+  if (goal.status === "completed" || pct >= 1) return { text: "Completed", color: "text-green-400", icon: Check };
+  if (pct >= 0.75) return { text: "On track", color: "text-blue-400", icon: Star };
+  return { text: "In progress", color: "text-amber-300", icon: Trophy };
+}
+
+export default function GoalsPage() {
+  const goals = useFinanceStore((s) => s.goals);
+  const goalSavings = useFinanceStore((s) => s.goalSavings);
+  const pockets = useFinanceStore((s) => s.pockets);
+  const addGoalSaving = useFinanceStore((s) => s.addGoalSaving);
+  const updateGoalSaving = useFinanceStore((s) => s.updateGoalSaving);
+  const deleteGoalSaving = useFinanceStore((s) => s.deleteGoalSaving);
+  const [toast, setToast] = useState<string | null>(null);
+  const [savingModal, setSavingModal] = useState<{ goal: Goal; type: "add" | "withdraw" } | null>(null);
+  const [withdrawDestination, setWithdrawDestination] = useState<"wallet" | "expense">("wallet");
+  const [savingAmount, setSavingAmount] = useState(0);
+  const [savingNote, setSavingNote] = useState("");
+  const [savingPocketId, setSavingPocketId] = useState("");
+  const [savingDate, setSavingDate] = useState("");
+
+  const [mounted, setMounted] = useState(false);
+  const [activeTab, setActiveTab] = useState<"active" | "completed" | "archived">("active");
+  const [formOpen, setFormOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [goalName, setGoalName] = useState("");
+  const [goalTarget, setGoalTarget] = useState("");
+  const [goalDeadline, setGoalDeadline] = useState("");
+  const [goalPocketId, setGoalPocketId] = useState<string>("");
+  const [goalColor, setGoalColor] = useState("#3b82f6");
+  const [goalIcon, setGoalIcon] = useState("Trophy");
+  const [goalNote, setGoalNote] = useState("");
+  const [error, setError] = useState("");
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+
+  useEffect(() => { setMounted(true); }, []);
+
+  const filteredGoals = useMemo(() => {
+    if (activeTab === "active") return goals.filter((g) => g.status === "active" || g.status === "paused");
+    if (activeTab === "completed") return goals.filter((g) => g.status === "completed" || goalSavingsTotal(goalSavingsForGoal(goalSavings, g.id)) >= g.target);
+    return goals.filter((g) => g.status === "archived");
+  }, [goals, goalSavings, activeTab]);
+
+  const totalTarget = useMemo(() => {
+    return goals.filter((g) => g.status !== "archived").reduce((sum, g) => sum + g.target, 0);
+  }, [goals]);
+
+  const totalSaved = useMemo(() => {
+    return goals.filter((g) => g.status !== "archived").reduce((sum, g) => sum + goalSavingsTotal(goalSavingsForGoal(goalSavings, g.id)), 0);
+  }, [goals, goalSavings]);
+
+  if (!mounted) return null;
+
+  const totalProgress = totalTarget > 0 ? Math.min(100, Math.round((totalSaved / totalTarget) * 100)) : 0;
+
+  const openAdd = () => {
+    setEditingId(null);
+    setGoalName("");
+    setGoalTarget("");
+    setGoalDeadline("");
+    setGoalPocketId("");
+    setGoalColor("#3b82f6");
+    setGoalIcon("Trophy");
+    setGoalNote("");
+    setError("");
+    setFormOpen(true);
+  };
+
+  const openEdit = (goal: Goal) => {
+    setEditingId(goal.id);
+    setGoalName(goal.name);
+    setGoalTarget(goal.target.toLocaleString("id-ID"));
+    setGoalDeadline(goal.deadline ?? "");
+    setGoalPocketId(goal.pocketId ?? "");
+    setGoalColor(goal.color ?? "#3b82f6");
+    setGoalIcon(goal.iconName ?? "Trophy");
+    setGoalNote(goal.note ?? "");
+    setError("");
+    setFormOpen(true);
+  };
+
+  const saveGoal = () => {
+    const name = goalName.trim();
+    const target = parseInt(goalTarget.replace(/\D/g, ""), 10);
+    if (!name) { setError("Name is required."); return; }
+    if (!target || target <= 0) { setError("Target must be above Rp 0."); return; }
+
+    const goal: Goal = {
+      id: editingId ?? `goal-${Date.now()}-${Math.floor(Math.random() * 1e6)}`,
+      name,
+      target,
+      deadline: goalDeadline || undefined,
+      pocketId: goalPocketId || undefined,
+      color: goalColor,
+      iconName: goalIcon,
+      note: goalNote.trim() || undefined,
+      status: "active",
+      createdAt: new Date().toISOString(),
+    };
+
+    if (editingId) updateGoal(editingId, goal);
+    else addGoal(goal);
+
+    setFormOpen(false);
+  };
+
+  const addSaving = (goalId: string, amount: number) => {
+    const goal = goals.find((g) => g.id === goalId);
+    if (!goal) return;
+    const pocketId = goal.pocketId || pockets[0]?.id || "p1";
+    addGoalSaving({
+      id: `gs-${Date.now()}-${Math.floor(Math.random() * 1e6)}`,
+      goalId,
+      amount,
+      pocketId,
+      date: new Date().toISOString().slice(0, 10),
+      note: amount > 0 ? "Saved" : "Withdrawn",
+    });
+  };
+
+  return (
+    <motion.main
+      className="relative min-h-screen bg-[#0A0A0A] text-white pb-28 px-4 pt-4"
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3 }}
+    >
+      <header className="relative mb-6">
+        <div className="flex items-center gap-3 mb-4">
+          <Link href="/" aria-label="Back home" className="w-10 h-10 rounded-full bg-white/5 border border-white/10 flex items-center justify-center hover:bg-white/15 transition">
+            <ArrowLeft className="w-5 h-5" />
+          </Link>
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight">Goals</h1>
+            <p className="text-[11px] font-semibold uppercase tracking-widest text-white/40 mt-1">Savings targets</p>
+          </div>
+        </div>
+        <div className="h-px bg-gradient-to-r from-blue-500/40 via-transparent to-transparent" />
+      </header>
+
+      {/* Summary */}
+      <section className="rounded-3xl bg-white/5 border border-white/10 p-5 mb-4">
+        <div className="flex items-center gap-2 mb-2">
+          <Trophy className="w-4 h-4 text-blue-500" />
+          <p className="text-xs font-semibold text-white/50 uppercase tracking-widest">Overall progress</p>
+          <span className="ml-auto text-xs font-bold text-white/70">{totalProgress}%</span>
+        </div>
+        <div className="flex items-baseline gap-2 flex-wrap">
+          <Money value={totalSaved} className="text-2xl font-bold tracking-tight" />
+          <span className="text-sm text-white/40">of <Money value={totalTarget} /></span>
+        </div>
+        <div className="w-full bg-white/10 rounded-full h-3 overflow-hidden mt-3" role="progressbar" aria-valuenow={totalProgress} aria-valuemin={0} aria-valuemax={100}>
+          <div className="h-full bg-blue-500 transition-all duration-500" style={{ width: `${totalProgress}%` }} />
+        </div>
+      </section>
+
+      {/* Tabs & Add */}
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex gap-1 bg-white/5 p-1 rounded-2xl border border-white/10 flex-1 mr-3">
+          {(["active", "completed", "archived"] as const).map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={cn(
+                "flex-1 py-1.5 rounded-xl text-xs font-semibold capitalize transition",
+                activeTab === tab ? "bg-blue-600 text-white" : "text-white/50 hover:text-white"
+              )}
+            >
+              {tab}
+            </button>
+          ))}
+        </div>
+        <button onClick={openAdd} aria-label="Add goal" className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center hover:bg-blue-500 active:scale-90 transition shrink-0">
+          <Trophy className="w-4 h-4 text-white" />
+        </button>
+      </div>
+
+      {/* List */}
+      {filteredGoals.length === 0 ? (
+        <div className="rounded-3xl bg-white/5 border border-white/10 p-8 text-center">
+          <Trophy className="w-8 h-8 text-white/30 mx-auto mb-3" />
+          <p className="text-sm font-semibold">No goals found</p>
+          <p className="text-xs text-white/40 mt-1 mb-4">Set target amounts for what you want to achieve.</p>
+          <button onClick={openAdd} className="px-4 py-2.5 rounded-full bg-blue-600 text-white text-sm font-semibold hover:bg-blue-500 transition">
+            Create goal
+          </button>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {filteredGoals.map((g) => {
+            const savingsForGoal = goalSavingsForGoal(goalSavings, g.id);
+            const saved = goalSavingsTotal(savingsForGoal);
+            const remaining = goalRemaining(g, saved);
+            const progress = g.target ? Math.min(100, Math.round((saved / g.target) * 100)) : 0;
+            const { text, color } = progressStatus(g, saved);
+            const Icon = catIcon(g.iconName);
+            const suggestion = suggestedMonthlySaving(g.id, savingsForGoal);
+
+            return (
+              <div key={g.id} className="rounded-2xl bg-white/5 border border-white/10 p-4">
+                <div className="flex items-center gap-3">
+                  <span className="w-10 h-10 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center shrink-0">
+                    <Icon className="w-5 h-5" style={{ color: g.color || "#3b82f6" }} />
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-baseline justify-between gap-2">
+                      <p className="text-sm font-semibold truncate">{g.name}</p>
+                      <p className="text-xs text-white/40 shrink-0">{progress}%</p>
+                    </div>
+                    <div className="flex items-baseline gap-1.5 mt-0.5 flex-wrap">
+                      <Money value={saved} className="text-sm font-bold" />
+                      <span className="text-xs text-white/40">of <Money value={g.target} /></span>
+                      <span className={cn("ml-auto text-xs font-semibold", color)}>{text}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="w-full bg-white/10 rounded-full h-2 overflow-hidden mt-3" role="progressbar" aria-valuenow={progress} aria-valuemin={0} aria-valuemax={100}>
+                  <div className="h-full bg-blue-500 transition-all duration-500" style={{ width: `${progress}%` }} />
+                </div>
+
+                <div className="flex items-center justify-between text-xs mt-2 text-white/40">
+                  <span>{deadlineLabel(g.deadline)}</span>
+                  <span>Left: <Money value={remaining} className="font-semibold text-white/80" /></span>
+                </div>
+
+                {suggestion && (
+                  <p className="text-[11px] text-blue-400 mt-2">💡 Suggested monthly save: Rp {suggestion.toLocaleString("id-ID")}</p>
+                )}
+
+                <div className="flex items-center justify-between mt-3 pt-3 border-t border-white/5">
+                  <div className="flex gap-2">
+                    {g.status === "active" && (
+                      <>
+                        <button onClick={() => addSaving(g.id, Math.round(g.target * 0.1))} className="px-3 py-1.5 rounded-lg bg-green-500/10 text-green-400 text-xs font-semibold hover:bg-green-500/20 transition">
+                          + Add
+                        </button>
+                        <button onClick={() => addSaving(g.id, -Math.round(g.target * 0.05))} className="px-3 py-1.5 rounded-lg bg-red-500/10 text-red-400 text-xs font-semibold hover:bg-red-500/20 transition">
+                          - Withdraw
+                        </button>
+                      </>
+                    )}
+                  </div>
+                  <div className="flex gap-2 ml-auto">
+                    <button onClick={() => openEdit(g)} className="text-xs font-semibold text-white/50 hover:text-white px-2 py-1">Edit</button>
+                    <button onClick={() => setConfirmDelete(g.id)} className="text-xs font-semibold text-red-400/80 hover:text-red-300 px-2 py-1">Delete</button>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Sheet */}
+      <Overlay open={formOpen} onClose={() => setFormOpen(false)} z={Z.sheet} label={editingId ? "Edit goal" : "Add goal"}>
+        <GrabHandle />
+        <div className="px-5 pb-6 pt-1 overflow-y-auto">
+          <h2 className="text-lg font-bold mb-1">{editingId ? "Edit goal" : "New goal"}</h2>
+          <p className="text-xs text-white/40 mb-4">Set a savings target</p>
+
+          <label className="text-xs font-semibold text-white/40 uppercase" htmlFor="goal-name">Goal name</label>
+          <input
+            id="goal-name"
+            type="text"
+            value={goalName}
+            onChange={(e) => setGoalName(e.target.value)}
+            placeholder="e.g. New Laptop"
+            className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-white mt-1 mb-4 min-h-[48px]"
+          />
+
+          <label className="text-xs font-semibold text-white/40 uppercase" htmlFor="goal-target">Target amount</label>
+          <div className="relative mt-1 mb-4">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-white/40 text-sm">Rp</span>
+            <input
+              id="goal-target"
+              type="text"
+              inputMode="numeric"
+              value={goalTarget}
+              onChange={(e) => {
+                const digits = e.target.value.replace(/\D/g, "").slice(0, 13);
+                setGoalTarget(digits ? Number(digits).toLocaleString("id-ID") : "");
+              }}
+              placeholder="0"
+              className="w-full bg-white/5 border border-white/10 rounded-xl pl-10 pr-3 py-3 text-white min-h-[48px]"
+            />
+          </div>
+
+          <label className="text-xs font-semibold text-white/40 uppercase" htmlFor="goal-pocket">Wallet</label>
+          <select
+            id="goal-pocket"
+            value={goalPocketId}
+            onChange={(e) => setGoalPocketId(e.target.value)}
+            className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-white mt-1 mb-4 min-h-[48px]"
+          >
+            <option value="">Default (none)</option>
+            {pockets.map((p) => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+          </select>
+
+          <div className="flex gap-3 mb-4">
+            <div className="flex-1">
+              <label className="text-xs font-semibold text-white/40 uppercase">Color</label>
+              <input
+                type="color"
+                value={goalColor}
+                onChange={(e) => setGoalColor(e.target.value)}
+                className="w-full h-12 bg-transparent cursor-pointer rounded-xl mt-1"
+              />
+            </div>
+            <div className="flex-1">
+              <label className="text-xs font-semibold text-white/40 uppercase">Icon</label>
+              <select
+                value={goalIcon}
+                onChange={(e) => setGoalIcon(e.target.value)}
+                className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-white mt-1 min-h-[48px]"
+              >
+                <option value="Trophy">Trophy</option>
+                <option value="Wallet">Wallet</option>
+                <option value="Home">Home</option>
+                <option value="ShoppingBag">Shopping</option>
+                <option value="Coffee">Food</option>
+              </select>
+            </div>
+          </div>
+
+          <label className="text-xs font-semibold text-white/40 uppercase" htmlFor="goal-note">Notes (optional)</label>
+          <textarea
+            id="goal-note"
+            value={goalNote}
+            onChange={(e) => setGoalNote(e.target.value)}
+            placeholder="Add details..."
+            className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-white mt-1 mb-4 min-h-[80px]"
+          />
+
+          {error && <p role="alert" className="text-xs text-red-400 mb-3">{error}</p>}
+
+          <button onClick={saveGoal} className="w-full h-12 rounded-full bg-blue-600 text-white font-semibold hover:bg-blue-500 active:scale-[0.98] transition">
+            {editingId ? "Save changes" : "Create goal"}
+          </button>
+        </div>
+      </Overlay>
+
+      {/* Confirm Delete */}
+      <Overlay open={!!confirmDelete} onClose={() => setConfirmDelete(null)} z={Z.confirm} label="Delete goal" variant="modal">
+        <div className="p-5">
+          <h2 className="text-base font-bold mb-1">Delete this goal?</h2>
+          <p className="text-xs text-white/50 mb-4">Saved funds remain in your wallet.</p>
+          <div className="flex gap-2">
+            <button onClick={() => setConfirmDelete(null)} className="flex-1 h-11 rounded-xl bg-white/5 border border-white/10 font-semibold text-sm">Cancel</button>
+            <button onClick={() => { if (confirmDelete) deleteGoal(confirmDelete); setConfirmDelete(null); }} className="flex-1 h-11 rounded-xl bg-red-600 font-semibold text-sm">Delete</button>
+          </div>
+        </div>
+      </Overlay>
+    </motion.main>
+  );
+}
