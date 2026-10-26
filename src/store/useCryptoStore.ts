@@ -35,10 +35,10 @@ export const useCryptoStore = create<CryptoStore>()(
       version: 2,
       migrate: (persistedState: unknown, version: number) => {
         if (version === 0 || version === 1) {
-          const state = persistedState as { favorites?: any[] };
+          const state = persistedState as { favorites?: FavoriteCoin[] };
           return {
             ...state,
-            favorites: (state.favorites || []).map((fav: any) => (
+            favorites: (state.favorites || []).map((fav: FavoriteCoin | string) => (
               typeof fav === 'string' ? { id: fav, name: fav, symbol: fav, large: '', thumb: '' } : { ...fav, large: fav.large || fav.thumb || '' }
             ))
           };
