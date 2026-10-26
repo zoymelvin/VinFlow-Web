@@ -61,7 +61,7 @@ export default function CryptoDetailPage() {
             title={data?.name as string || id} 
             label={data ? `${String(data.symbol).toUpperCase()} · RANK #${data.market_cap_rank as number || "—"}` : ""}
             left={<Link href="/crypto" className="p-2 -ml-2"><ArrowLeft /></Link>} 
-            right={data && <button onClick={() => isFav ? removeFavorite(id) : addFavorite({ id, name: String(data.name), symbol: String(data.symbol), thumb: String((data.image as { thumb: string })?.thumb) })}><Star className={cn(isFav ? "text-amber-300 fill-amber-300" : "text-white/40")} /></button>} 
+            right={data && <button onClick={() => isFav ? removeFavorite(id) : addFavorite({ id, name: String(data.name), symbol: String(data.symbol), large: String((data.image as { large: string })?.large || ""), thumb: String((data.image as { thumb: string })?.thumb || "") })}><Star className={cn(isFav ? "text-amber-300 fill-amber-300" : "text-white/40")} /></button>} 
         />
         
         {error && (
