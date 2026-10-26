@@ -1,11 +1,9 @@
 "use client";
 
-import { useEffect, useState, useRef, useMemo, useCallback } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import {
   ArrowLeft,
-  Search,
   SlidersHorizontal,
   Star,
   Check,

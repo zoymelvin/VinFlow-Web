@@ -1,13 +1,7 @@
 "use client";
 
-import { useEffect, useState, useMemo, useRef } from "react";
 import { motion } from "framer-motion";
 import {
-  AreaChart, Area,
-  BarChart, Bar,
-  PieChart, Pie, Cell,
-  XAxis, YAxis, Tooltip, CartesianGrid,
-  ResponsiveContainer,
 } from "recharts";
 import {
   TrendingUp, TrendingDown, Scale, Calendar, ChevronLeft, ChevronRight, ChevronDown, Check, X
@@ -87,7 +81,6 @@ export default function LaporanPage() {
       />
 
       <div className="px-4 pt-4">
-        {/* Filter Bar */}
         <div className="flex items-center gap-2.5 mb-5">
           <button
             type="button"
