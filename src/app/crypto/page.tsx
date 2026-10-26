@@ -104,7 +104,7 @@ export default function CryptoPage() {
                     <img src={coin.large || coin.thumb} alt={coin.name} className="w-8 h-8 rounded-full bg-white/5 object-cover" />
                     <div><p className="text-sm font-semibold">{coin.name}</p><p className="text-xs text-[#9aa3b2] uppercase">{coin.symbol}</p></div>
                   </Link>
-                  <button onClick={() => isFav ? removeFavorite(coin.id) : addFavorite({ id: coin.id, name: coin.name, symbol: coin.symbol, thumb: coin.thumb })}>
+                  <button onClick={() => isFav ? removeFavorite(coin.id) : addFavorite({ id: coin.id, name: coin.name, symbol: coin.symbol, large: coin.large, thumb: coin.thumb })}>
                     <Star className={cn("w-5 h-5", isFav ? "text-amber-300 fill-amber-300" : "text-white/40")} />
                   </button>
                 </div>
@@ -124,7 +124,7 @@ export default function CryptoPage() {
               const price = livePrices[fav.symbol.toLowerCase()] || market?.current_price || 0;
               return (
                 <Link key={fav.id} href={`/crypto/${fav.id}`} className="flex items-center gap-3 py-3.5 px-4 block">
-                  <img src={fav.thumb} alt={fav.name} className="w-9 h-9 rounded-full" />
+                  <img src={fav.large || fav.thumb} alt={fav.name} className="w-9 h-9 rounded-full" />
                   <div className="flex-1 min-w-0"><p className="text-sm font-semibold truncate">{fav.name}</p><p className="text-xs text-[#9aa3b2]">{fav.symbol.toUpperCase()}</p></div>
                   <div className="text-right">
                     <p className="text-sm font-bold font-numeric">{price ? formatUSD(price) : "—"}</p>

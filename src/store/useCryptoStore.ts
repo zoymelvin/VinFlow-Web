@@ -5,6 +5,7 @@ interface FavoriteCoin {
   id: string;
   name: string;
   symbol: string;
+  large: string;
   thumb: string;
 }
 
@@ -34,11 +35,11 @@ export const useCryptoStore = create<CryptoStore>()(
       version: 2,
       migrate: (persistedState: unknown, version: number) => {
         if (version === 0 || version === 1) {
-          const state = persistedState as { favorites?: string[] };
+          const state = persistedState as { favorites?: any[] };
           return {
             ...state,
-            favorites: (state.favorites || []).map((id: string) => (
-              typeof id === 'string' ? { id, name: id, symbol: id, thumb: '' } : id
+            favorites: (state.favorites || []).map((fav: any) => (
+              typeof fav === 'string' ? { id: fav, name: fav, symbol: fav, large: '', thumb: '' } : { ...fav, large: fav.large || fav.thumb || '' }
             ))
           };
         }
