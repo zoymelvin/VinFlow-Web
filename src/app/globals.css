@@ -10,67 +10,68 @@
 
 @layer base {
   .theme {
-    --font-heading: var(--font-geist);
-    --font-sans: var(--font-geist);
+    --font-heading: var(--font-space);
+    --font-sans: var(--font-space);
+    --font-space: var(--font-space);
   }
 
   :root {
     /* Core palette — Midnight Glass */
-    --background: #060608;
-    --foreground: #F0F0F5;
+    --background: #0b0d12;
+    --foreground: #FFFFFF;
 
     /* Card system */
-    --card: #0F1117;
-    --card-foreground: #F0F0F5;
-    --card-border: rgba(255, 255, 255, 0.06);
+    --card: #151922;
+    --card-foreground: #FFFFFF;
+    --card-border: #232938;
 
     /* Popover */
-    --popover: #161820;
-    --popover-foreground: #F0F0F5;
+    --popover: #151922;
+    --popover-foreground: #FFFFFF;
 
-    /* Primary — iOS Blue / Ocean Blue */
-    --primary: #007AFF;
+    /* Primary — Blue accent */
+    --primary: #2f7bff;
     --primary-foreground: #FFFFFF;
-    --primary-glow: rgba(0, 122, 255, 0.4);
-    --primary-glow-sm: rgba(0, 122, 255, 0.18);
-    --primary-muted: rgba(0, 122, 255, 0.12);
+    --primary-glow: rgba(47, 123, 255, 0.4);
+    --primary-glow-sm: rgba(47, 123, 255, 0.18);
+    --primary-muted: rgba(47, 123, 255, 0.12);
 
     /* Secondary */
-    --secondary: #1A1D2B;
-    --secondary-foreground: #9B9DB5;
+    --secondary: #232938;
+    --secondary-foreground: #9aa3b2;
 
     /* Muted */
-    --muted: #13151F;
-    --muted-foreground: #5E6076;
+    --muted: #151922;
+    --muted-foreground: #9aa3b2;
 
     /* Accent */
-    --accent: #007AFF;
+    --accent: #6ea4ff;
     --accent-foreground: #FFFFFF;
 
     /* Destructive */
-    --destructive: #FF3B30;
+    --destructive: #ff6b7a;
     --destructive-foreground: #FFFFFF;
 
     /* Income / Expense semantic colors */
-    --income: #30D158;
-    --income-muted: rgba(48, 209, 88, 0.12);
-    --expense: #FF453A;
-    --expense-muted: rgba(255, 69, 58, 0.12);
+    --income: #3ddc97;
+    --income-muted: rgba(61, 220, 151, 0.12);
+    --expense: #ff6b7a;
+    --expense-muted: rgba(255, 107, 122, 0.12);
 
     /* Border & inputs */
-    --border: rgba(255, 255, 255, 0.06);
-    --input: rgba(255, 255, 255, 0.08);
-    --ring: rgba(0, 122, 255, 0.5);
+    --border: #232938;
+    --input: #232938;
+    --ring: rgba(47, 123, 255, 0.5);
 
     /* Radius */
     --radius: 1rem;
 
-    /* Charts — blue gradient palette */
-    --chart-1: #007AFF;
-    --chart-2: #0A84FF;
-    --chart-3: #30D158;
-    --chart-4: #FF9F0A;
-    --chart-5: #FF453A;
+    /* Charts */
+    --chart-1: #6ea4ff;
+    --chart-2: #ffa94d;
+    --chart-3: #3ddc97;
+    --chart-4: #a78bfa;
+    --chart-5: #ff6b7a;
 
     /* Sidebar */
     --sidebar: #0C0E16;
@@ -85,40 +86,40 @@
 
   /* Always dark */
   .dark {
-    --background: #060608;
-    --foreground: #F0F0F5;
-    --card: #0F1117;
-    --card-foreground: #F0F0F5;
-    --popover: #161820;
-    --popover-foreground: #F0F0F5;
-    --primary: #007AFF;
+    --background: #0b0d12;
+    --foreground: #FFFFFF;
+    --card: #151922;
+    --card-foreground: #FFFFFF;
+    --popover: #151922;
+    --popover-foreground: #FFFFFF;
+    --primary: #2f7bff;
     --primary-foreground: #FFFFFF;
-    --primary-glow: rgba(0, 122, 255, 0.4);
-    --primary-glow-sm: rgba(0, 122, 255, 0.18);
-    --primary-muted: rgba(0, 122, 255, 0.12);
-    --secondary: #1A1D2B;
-    --secondary-foreground: #9B9DB5;
-    --muted: #13151F;
-    --muted-foreground: #5E6076;
-    --accent: #007AFF;
+    --primary-glow: rgba(47, 123, 255, 0.4);
+    --primary-glow-sm: rgba(47, 123, 255, 0.18);
+    --primary-muted: rgba(47, 123, 255, 0.12);
+    --secondary: #232938;
+    --secondary-foreground: #9aa3b2;
+    --muted: #151922;
+    --muted-foreground: #9aa3b2;
+    --accent: #6ea4ff;
     --accent-foreground: #FFFFFF;
-    --destructive: #FF3B30;
+    --destructive: #ff6b7a;
     --destructive-foreground: #FFFFFF;
-    --income: #30D158;
-    --income-muted: rgba(48, 209, 88, 0.12);
-    --expense: #FF453A;
-    --expense-muted: rgba(255, 69, 58, 0.12);
-    --border: rgba(255, 255, 255, 0.06);
-    --input: rgba(255, 255, 255, 0.08);
-    --ring: rgba(0, 122, 255, 0.5);
-    --sidebar: #0C0E16;
-    --sidebar-foreground: #F0F0F5;
-    --sidebar-primary: #007AFF;
+    --income: #3ddc97;
+    --income-muted: rgba(61, 220, 151, 0.12);
+    --expense: #ff6b7a;
+    --expense-muted: rgba(255, 107, 122, 0.12);
+    --border: #232938;
+    --input: #232938;
+    --ring: rgba(47, 123, 255, 0.5);
+    --sidebar: #0b0d12;
+    --sidebar-foreground: #FFFFFF;
+    --sidebar-primary: #2f7bff;
     --sidebar-primary-foreground: #FFFFFF;
-    --sidebar-accent: #1A1D2B;
-    --sidebar-accent-foreground: #F0F0F5;
-    --sidebar-border: rgba(255, 255, 255, 0.06);
-    --sidebar-ring: rgba(0, 122, 255, 0.5);
+    --sidebar-accent: #232938;
+    --sidebar-accent-foreground: #FFFFFF;
+    --sidebar-border: #232938;
+    --sidebar-ring: rgba(47, 123, 255, 0.5);
   }
 
   * {
@@ -150,7 +151,21 @@
    Typography — Tight tracking for headings
    ───────────────────────────────────────────── */
 @layer utilities {
-  .text-balance { text-wrap: balance; }
+  @media (prefers-reduced-motion: no-preference) {
+    .animate-entrance {
+      animation: entrance 260ms cubic-bezier(.2,.8,.2,1) backwards;
+    }
+  }
+
+@keyframes entrance {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes draw {
+  from { stroke-dashoffset: 1000; }
+  to { stroke-dashoffset: 0; }
+}
 
   h1, h2, h3, h4, h5, h6, .heading {
     letter-spacing: -0.03em;

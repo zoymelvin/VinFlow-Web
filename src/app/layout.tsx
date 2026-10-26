@@ -1,11 +1,19 @@
 import type { Metadata, Viewport } from "next";
+import { Space_Grotesk } from "next/font/google";
 import localFont from "next/font/local";
 import { cn } from "@/lib/utils";
 import BottomNav from "@/components/BottomNav";
 // import SettingsApplier removed – no Reduce Motion
 import "./globals.css";
 
-/* ── Geist fonts ──────────────────────────────────── */
+/* ── Fonts ────────────────────────────────────────── */
+const spaceGrotesk = Space_Grotesk({
+  subsets: ["latin"],
+  variable: "--font-space",
+  display: "swap",
+  weight: ["400", "500", "600", "700"],
+});
+
 const geistSans = localFont({
   src: "./fonts/GeistVF.woff",
   variable: "--font-geist",
@@ -42,6 +50,10 @@ export const metadata: Metadata = {
     title: "VinFlow — Personal Finance Tracker",
     description: "Track, manage, and visualize your personal finances with VinFlow.",
   },
+  icons: {
+    icon: "/favicon.ico",
+    apple: "/apple-touch-icon.png",
+  },
   manifest: "/manifest.json",
 };
 
@@ -52,7 +64,7 @@ export const viewport: Viewport = {
   maximumScale: 1,
   userScalable: false,
   viewportFit: "cover",
-  themeColor: [{ media: "(prefers-color-scheme: dark)", color: "#060608" }],
+  themeColor: "#0b1230",
 };
 
 /* ── Root Layout ──────────────────────────────────── */
@@ -62,7 +74,7 @@ export default function RootLayout({
   return (
     <html
       lang="id"
-      className={cn("dark", geistSans.variable, geistMono.variable)}
+      className={cn("dark", spaceGrotesk.variable, geistSans.variable, geistMono.variable)}
       suppressHydrationWarning
     >
       <head>
@@ -73,9 +85,7 @@ export default function RootLayout({
         <meta name="mobile-web-app-capable" content="yes" />
 
         {/* Apple touch icons */}
-        <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png" />
-        <link rel="apple-touch-icon" sizes="152x152" href="/icons/apple-touch-icon-152.png" />
-        <link rel="apple-touch-icon" sizes="120x120" href="/icons/apple-touch-icon-120.png" />
+        <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
 
         {/* Splash screens */}
         <link
@@ -91,7 +101,7 @@ export default function RootLayout({
       </head>
        <body
          className={cn(
-           "min-h-dvh bg-background font-sans antialiased",
+           "min-h-dvh bg-background font-space antialiased",
            // Global bottom padding so page content clears the fixed BottomNav
            "pb-[env(safe-area-inset-bottom)]",
          )}

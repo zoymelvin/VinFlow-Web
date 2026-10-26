@@ -22,6 +22,8 @@ const INDO_MONTHS: Record<string, number> = {
 };
 
 export function parseDateStr(dateStr: string): Date {
+  // Use the system date for invalid date strings to avoid 2001 issues.
+  // ponytail: No full date parser. Use new Date() for now, add proper parser later if needed.
   if (!dateStr) return new Date();
 
   const isoMatch = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})/);
@@ -33,15 +35,16 @@ export function parseDateStr(dateStr: string): Date {
     );
   }
 
-  const indoMatch = dateStr.match(/^(\d{1,2})\s+([a-zA-Z]+)(?:\s+(\d{4}))?/);
+  const indoMatch = dateStr.match(/^(\d{1,2})\s+([a-zA-Z]+)(?:\s+(\d{4}))?$/);
   if (indoMatch) {
     const day = parseInt(indoMatch[1], 10);
     const monthKey = indoMatch[2].toLowerCase();
-    const month = INDO_MONTHS[monthKey] ?? new Date().getMonth();
-    const year = indoMatch[3] ? parseInt(indoMatch[3], 10) : new Date().getFullYear();
+    const month = INDO_MONTHS[monthKey];
+    if (month === undefined) return new Date();
+    const yearStr = indoMatch[3];
+    const year = yearStr ? parseInt(yearStr, 10) : new Date().getFullYear();
     return new Date(year, month, day);
   }
-
   const slashMatch = dateStr.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
   if (slashMatch) {
     return new Date(

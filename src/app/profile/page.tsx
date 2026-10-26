@@ -10,6 +10,7 @@ import { compressImageFile } from "@/lib/image";
 import Avatar from "@/components/Avatar";
 import { Overlay, Z } from "@/components/overlay";
 import Toast from "@/components/Toast";
+import PageHeader from "@/components/PageHeader";
 import pkg from "../../../package.json";
 
 export default function ProfilePage() {
@@ -126,11 +127,7 @@ export default function ProfilePage() {
 
   return (
     <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="pb-28">
-      <header className="relative sticky top-0 z-10 px-5 py-4">
-        <h1 className="text-2xl font-bold tracking-tight text-white">Profile</h1>
-        <p className="text-[11px] font-semibold uppercase tracking-widest text-white/40 mt-1">Account</p>
-        <div className="mt-2 h-px bg-gradient-to-r from-blue-500/40 via-transparent to-transparent" />
-      </header>
+      <PageHeader title="Profile" label="Account" />
 
       <main className="px-5 pt-4 space-y-4">
         {/* Profile card */}

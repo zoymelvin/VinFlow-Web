@@ -19,7 +19,7 @@ const navItems: NavItem[] = [
   { id: "home",      label: "Home",        icon: Home,      href: "/" },
   { id: "pockets",   label: "Wallets",     icon: Layers,    href: "/pockets" },
   { id: "transaksi", label: "Add",         icon: Plus,      href: "/transaksi", isFab: true },
-  { id: "bills",     label: "Reports",     icon: BarChart3, href: "/bills" },
+  { id: "reports",   label: "Reports",     icon: BarChart3, href: "/reports" },
   { id: "profile",   label: "Profile",     icon: User,      href: "/profile" },
 ];
 
@@ -32,9 +32,9 @@ export default function BottomNav() {
     if (pathname === "/")           return "home";
     if (pathname === "/pockets")    return "pockets";
     if (pathname === "/transaksi")  return "transaksi";
-    if (pathname === "/bills")      return "bills";
+    if (pathname === "/reports")    return "reports";
     if (pathname.startsWith("/profile")) return "profile";
-    return null; // e.g. /riwayat: halaman non-nav, jangan sorot menu yang salah
+    return null;
   })();
 
   return (

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { motion } from "framer-motion";
 import Link from "next/link";
 import {
@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useFinanceStore, type Transaction } from "@/store/useFinanceStore";
+import { getSystemDate, getSystemTime } from "@/lib/date";
 import { Overlay, Portal, GrabHandle, Z } from "@/components/overlay";
 import Money from "@/components/Money";
 import Toast from "@/components/Toast";
@@ -42,11 +43,19 @@ export default function TransaksiPage() {
   const updatePocketBalance = useFinanceStore((s) => s.updatePocketBalance);
   const updateTransaction = useFinanceStore((s) => s.updateTransaction);
 
-  const [isExpense, setIsExpense] = useState(true);
+
   const [amount, setAmount] = useState("");
   const [note, setNote] = useState("");
   const [selPocket, setSelPocket] = useState("p2");
-  const [selCat, setSelCat] = useState("belanja");
+  const getDefaultCategory = useCallback((isExp: boolean) => {
+    if (isExp) {
+      return CATS.find(c => c.label === "Food")?.id || CATS[0].id;
+    }
+    return CATS.find(c => c.label === "Salary")?.id || CATS[0].id;
+  }, []);
+
+  const [isExpense, setIsExpense] = useState(true);
+  const [selCat, setSelCat] = useState(getDefaultCategory(true));
   const [catOpen, setCatOpen] = useState(false);
   const [saved, setSaved] = useState(false);
   const [mounted, setMounted] = useState(false);
@@ -143,8 +152,8 @@ export default function TransaksiPage() {
       amount: rawAmount,
       isExpense,
       pocketId: pocket.id,
-      time: new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hourCycle: "h23" }),
-      date: new Date().toLocaleDateString("en-US", { month: "long", day: "numeric" }),
+      time: getSystemTime(),
+      date: getSystemDate(),
       note: cleanNote || undefined,
       image,
       goalAllocation: !isExpense && allocGoalId && allocAmount > 0 ? [{ goalId: allocGoalId, amount: allocAmount }] : undefined,
@@ -184,7 +193,7 @@ export default function TransaksiPage() {
           goalId: allocGoalId,
           amount: allocAmount,
           pocketId: pocket.id,
-          date: new Date().toISOString().slice(0, 10),
+          date: getSystemDate(),
           note: `From income: ${cleanNote || "Income"}`,
           transactionId: txn.id,
         });
@@ -198,7 +207,7 @@ export default function TransaksiPage() {
           goalId: allocGoalId,
           amount: allocAmount,
           pocketId: pocket.id,
-          date: new Date().toISOString().slice(0, 10),
+          date: getSystemDate(),
           note: `From income: ${cleanNote || "Income"}`,
           transactionId: txn.id,
         });
@@ -256,7 +265,6 @@ export default function TransaksiPage() {
     };
     img.src = url;
   };
-
   return (
     <motion.main
       className="relative min-h-[100dvh] bg-background text-foreground pb-24 overflow-y-auto px-4 pt-4 flex flex-col justify-between"
@@ -300,7 +308,10 @@ export default function TransaksiPage() {
         >
           <div className="flex rounded-2xl glass-card p-1 shadow-card">
             <button
-              onClick={() => setIsExpense(true)}
+              onClick={() => {
+              setIsExpense(true);
+              setSelCat(getDefaultCategory(true));
+            }}
               className={cn(
                 "flex-1 py-3 rounded-xl text-sm font-semibold transition-all duration-300",
                 isExpense
@@ -311,7 +322,10 @@ export default function TransaksiPage() {
               Expense
             </button>
             <button
-              onClick={() => setIsExpense(false)}
+              onClick={() => {
+              setIsExpense(false);
+              setSelCat(getDefaultCategory(false));
+            }}
               className={cn(
                 "flex-1 py-3 rounded-xl text-sm font-semibold transition-all duration-300",
                 !isExpense
@@ -625,7 +639,10 @@ export default function TransaksiPage() {
         <button
           onClick={handleSave}
           disabled={!amount || parseFloat(amount) <= 0}
-          className="w-full h-14 rounded-full surface-primary text-white text-base font-semibold hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-30 disabled:grayscale shadow-diffused-lg"
+          className={cn(
+            "w-full h-14 rounded-full text-white text-base font-semibold hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-30 disabled:grayscale shadow-diffused-lg",
+            isExpense ? "bg-[#FF453A] border-[#FF453A]" : "bg-[#007AFF] border-[#007AFF]"
+          )}
         >
           Save {editId ? "Changes" : "Transaction"}
         </button>

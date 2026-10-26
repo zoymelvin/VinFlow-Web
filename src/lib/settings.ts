@@ -36,11 +36,12 @@ export function validateName(name: string): string | null {
 
 /** IDR, no decimals. */
 export function formatIDR(value: number): string {
+  const digits = value < 1000 ? 2 : 0;
   return new Intl.NumberFormat("id-ID", {
     style: "currency",
     currency: "IDR",
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
   }).format(value);
 }
 
@@ -55,8 +56,7 @@ export function formatMoneyDisplay(
 
 export function getGreeting(hour: number): string {
   if (hour >= 5 && hour < 12) return "Good Morning";
-  if (hour >= 12 && hour < 15) return "Good Afternoon";
-  if (hour >= 15 && hour < 18) return "Good Evening";
+  if (hour >= 12 && hour < 18) return "Good Afternoon";
   return "Good Evening";
 }
 

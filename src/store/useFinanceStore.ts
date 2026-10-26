@@ -24,20 +24,26 @@ export type Transaction = {
   image?: string;
   starred?: boolean;
   viewed?: boolean;
-  /** Optional goal allocation for income transactions */
   goalAllocation?: { goalId: string; amount: number }[];
 };
 
 /* ── Budgets ─────────────────────────────────────────── */
-export type BudgetCategory = "__total__" | string;
+export type BudgetCategory = string;
+
+export type BudgetTopUp = {
+  id: string;
+  amount: number;
+  date: string;
+};
 
 export type Budget = {
   id: string;
-  category: BudgetCategory;
-  amount: number;
-  /** YYYY-MM, e.g. "2024-09" */
+  categoryId: string;
+  baseAmount: number;
   period: string;
-  rollover?: boolean;
+  startDate?: string;
+  topUps?: BudgetTopUp[];
+  createdAt?: string;
 };
 
 /* ── Goals ──────────────────────────────────────────── */
@@ -47,13 +53,10 @@ export type GoalSaving = {
   id: string;
   goalId: string;
   amount: number;
-  /** Source wallet the money came from (or savings wallet) */
   pocketId: string;
   date: string;
   note?: string;
-  /** Income transaction this saving came from (if any) */
   transactionId?: string;
-  /** Transfer transaction that moved the money (if any) */
   transferTransactionId?: string;
 };
 
@@ -61,56 +64,16 @@ export type Goal = {
   id: string;
   name: string;
   target: number;
-  /** ISO date string (YYYY-MM-DD), optional */
   deadline?: string;
   color?: string;
-  iconName?: string;
+  iconName: string;
   note?: string;
-  /** Wallet where this goal's money is kept (required) */
   pocketId: string;
   status: GoalStatus;
   createdAt: string;
 };
 
-/* ── Bills ──────────────────────────────────────────── */
-export type BillFrequency = "once" | "weekly" | "biweekly" | "monthly" | "quarterly" | "yearly";
-
-export type BillPayment = {
-  id: string;
-  date: string;
-  amount: number;
-  pocketId: string;
-  transactionId: string;
-  note?: string;
-};
-
-export type Bill = {
-  id: string;
-  name: string;
-  category: string;
-  amount: number;
-  /** YYYY-MM-DD */
-  dueDate: string;
-  /** Wallet this bill pays from */
-  pocketId: string;
-  note?: string;
-  frequency: BillFrequency;
-  /** Variable amount (e.g. electricity) — bill.amount holds estimate */
-  variable?: boolean;
-  /** Reminder lead time in days */
-  reminderDays: number;
-  /** Optional end date (YYYY-MM-DD) */
-  endDate?: string;
-  /** Optional total installments (e.g. 12 for a 12-month loan) */
-  totalInstallments?: number;
-  /** YYYY-MM-DD */
-  startDate: string;
-  color?: string;
-  iconName?: string;
-  paused?: boolean;
-  ended?: boolean;
-  payments: BillPayment[];
-};
+import { getSystemDate, getSystemTime } from "../lib/date";
 
 type FinanceState = {
   pockets: Pocket[];
@@ -118,11 +81,9 @@ type FinanceState = {
   budgets: Budget[];
   goals: Goal[];
   goalSavings: GoalSaving[];
-  bills: Bill[];
   budgetAlerts: string[];
   seenBudgetAlerts: string[];
 
-  /* pockets & transactions (existing) */
   addPocket: (pocket: Pocket) => void;
   deletePocket: (id: string) => void;
   updatePocketBalance: (id: string, newBalance: number) => void;
@@ -141,7 +102,6 @@ type FinanceState = {
   clearTransactions: () => void;
   resetFinance: () => void;
 
-  /* budgets */
   addBudget: (b: Budget) => void;
   updateBudget: (id: string, patch: Partial<Budget>) => void;
   deleteBudget: (id: string) => void;
@@ -150,7 +110,6 @@ type FinanceState = {
   markBudgetAlertSeen: (key: string) => void;
   clearBudgetAlerts: () => void;
 
-  /* goals */
   addGoal: (g: Goal) => void;
   updateGoal: (id: string, patch: Partial<Goal>) => void;
   deleteGoal: (id: string) => void;
@@ -159,14 +118,6 @@ type FinanceState = {
   updateGoalSaving: (id: string, patch: Partial<GoalSaving>) => void;
   deleteGoalSaving: (id: string) => void;
   setGoalSavings: (s: GoalSaving[]) => void;
-
-  /* bills */
-  addBill: (b: Bill) => void;
-  updateBill: (id: string, patch: Partial<Bill>) => void;
-  deleteBill: (id: string) => void;
-  setBills: (b: Bill[]) => void;
-  recordBillPayment: (billId: string, payment: BillPayment) => void;
-  removeBillPayment: (billId: string, paymentId: string) => void;
 };
 
 const INITIAL_POCKETS: Pocket[] = [
@@ -176,9 +127,8 @@ const INITIAL_POCKETS: Pocket[] = [
 ];
 
 const SEED_BUDGETS: Budget[] = [
-  { id: "b-seed-total", category: "__total__", amount: 5000000, period: currentPeriod() },
-  { id: "b-seed-makan", category: "Food", amount: 1500000, period: currentPeriod() },
-  { id: "b-seed-transport", category: "Transport", amount: 500000, period: currentPeriod() },
+  { id: "b-seed-food", categoryId: "Food", baseAmount: 1500000, period: currentPeriod(), startDate: currentDay(), createdAt: currentDay(), topUps: [] },
+  { id: "b-seed-transport", categoryId: "Transport", baseAmount: 500000, period: currentPeriod(), startDate: currentDay(), createdAt: currentDay(), topUps: [] },
 ];
 
 const SEED_GOALS: Goal[] = [
@@ -190,51 +140,6 @@ const SEED_GOAL_SAVINGS: GoalSaving[] = [
   { id: "gs-1", goalId: "g-seed-laptop", amount: 2000000, pocketId: "p1", date: new Date(Date.now() - 90 * 86400000).toISOString().slice(0, 10) },
   { id: "gs-2", goalId: "g-seed-laptop", amount: 1500000, pocketId: "p1", date: new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10) },
   { id: "gs-3", goalId: "g-seed-vacation", amount: 1200000, pocketId: "p1", date: new Date(Date.now() - 20 * 86400000).toISOString().slice(0, 10) },
-];
-
-const SEED_BILLS: Bill[] = [
-  {
-    id: "bill-seed-internet",
-    name: "Internet",
-    category: "Data Plan",
-    amount: 350000,
-    dueDate: currentDay(),
-    pocketId: "p1",
-    frequency: "monthly",
-    reminderDays: 3,
-    startDate: new Date(Date.now() - 60 * 86400000).toISOString().slice(0, 10),
-    color: "#3b82f6",
-    iconName: "Zap",
-    payments: [],
-  },
-  {
-    id: "bill-seed-rent",
-    name: "Rent",
-    category: "Rent",
-    amount: 2500000,
-    dueDate: daysFromNow(5),
-    pocketId: "p1",
-    frequency: "monthly",
-    reminderDays: 5,
-    startDate: new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10),
-    color: "#a855f7",
-    iconName: "Home",
-    payments: [],
-  },
-  {
-    id: "bill-seed-spotify",
-    name: "Music Streaming",
-    category: "Hobby",
-    amount: 55000,
-    dueDate: daysFromNow(-2),
-    pocketId: "p2",
-    frequency: "monthly",
-    reminderDays: 1,
-    startDate: new Date(Date.now() - 120 * 86400000).toISOString().slice(0, 10),
-    color: "#10b981",
-    iconName: "Receipt",
-    payments: [],
-  },
 ];
 
 function currentPeriod(): string {
@@ -249,11 +154,6 @@ function futurePeriod(monthsAhead: number): string {
 function currentDay(): string {
   return new Date().toISOString().slice(0, 10);
 }
-function daysFromNow(days: number): string {
-  const d = new Date();
-  d.setDate(d.getDate() + days);
-  return d.toISOString().slice(0, 10);
-}
 
 export const useFinanceStore = create<FinanceState>()(
   persist(
@@ -263,14 +163,12 @@ export const useFinanceStore = create<FinanceState>()(
       budgets: SEED_BUDGETS,
       goals: SEED_GOALS,
       goalSavings: SEED_GOAL_SAVINGS,
-      bills: SEED_BILLS,
       budgetAlerts: [],
       seenBudgetAlerts: [],
 
       addPocket: (pocket) => set((state) => ({ pockets: [...state.pockets, pocket] })),
       deletePocket: (id) =>
         set((state) => {
-          // never delete a wallet that still holds funds for a non-archived goal
           const goalUses = state.goals.some((g) => g.pocketId === id && g.status !== "archived");
           if (goalUses) return state;
           return {
@@ -295,8 +193,8 @@ export const useFinanceStore = create<FinanceState>()(
             isTransfer: true,
             pocketId: from,
             transferToPocketId: to,
-            time: new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hourCycle: "h23" }),
-            date: new Date().toLocaleDateString("en-US", { month: "long", day: "numeric" }),
+            time: getSystemTime(),
+            date: getSystemDate(),
             note: note,
             goalAllocation: goalId ? [{ goalId, amount: Math.round(amount) }] : undefined,
           };
@@ -368,19 +266,22 @@ export const useFinanceStore = create<FinanceState>()(
           budgets: SEED_BUDGETS,
           goals: SEED_GOALS,
           goalSavings: SEED_GOAL_SAVINGS,
-          bills: SEED_BILLS,
           budgetAlerts: [],
           seenBudgetAlerts: [],
         }),
 
-      /* budgets */
-      addBudget: (b) => set((state) => ({ budgets: [...state.budgets, b] })),
-      updateBudget: (id, patch) =>
+      addBudget: (b: Budget) => set((state) => ({ budgets: [...state.budgets, b] })),
+      updateBudget: (id: string, patch: Partial<Budget>) =>
         set((state) => ({ budgets: state.budgets.map((b) => b.id === id ? { ...b, ...patch, id: b.id } : b) })),
-      deleteBudget: (id) => set((state) => ({ budgets: state.budgets.filter((b) => b.id !== id) })),
+      deleteBudget: (id: string) => set((state) => ({ budgets: state.budgets.filter((b) => b.id !== id) })),
+      topUpBudget: (id: string, amount: number) =>
+        set((state) => ({
+          budgets: state.budgets.map((b) =>
+            b.id === id ? { ...b, topUps: [...(b.topUps ?? []), { id: `topup-${Date.now()}`, amount, date: new Date().toISOString().slice(0, 10) }] } : b
+          ),
+        })),
       setBudgets: (budgets) => set({ budgets }),
 
-      /* budget alerts */
       addBudgetAlert: (key: string) => set((state) => ({
         budgetAlerts: state.budgetAlerts.includes(key)
           ? state.budgetAlerts
@@ -391,7 +292,6 @@ export const useFinanceStore = create<FinanceState>()(
       })),
       clearBudgetAlerts: () => set({ budgetAlerts: [], seenBudgetAlerts: [] }),
 
-      /* goals */
       addGoal: (g) => set((state) => ({ goals: [...state.goals, g] })),
       updateGoal: (id, patch) =>
         set((state) => ({ goals: state.goals.map((g) => g.id === id ? { ...g, ...patch, id: g.id } : g) })),
@@ -401,8 +301,6 @@ export const useFinanceStore = create<FinanceState>()(
           goalSavings: state.goalSavings.filter((s) => s.goalId !== id),
         })),
       setGoals: (goals) => set({ goals }),
-      // Savings Wallet model: money already sits in the savings wallet.
-      // A GoalSaving is a *label* on that money — it never moves funds itself.
       addGoalSaving: (s) =>
         set((state) => ({
           goalSavings: [...state.goalSavings, { ...s, amount: Math.round(s.amount) }],
@@ -418,52 +316,44 @@ export const useFinanceStore = create<FinanceState>()(
           goalSavings: state.goalSavings.filter((x) => x.id !== id),
         })),
       setGoalSavings: (goalSavings) => set({ goalSavings }),
-
-      /* bills */
-      addBill: (b) => set((state) => ({ bills: [...state.bills, b] })),
-      updateBill: (id, patch) =>
-        set((state) => ({ bills: state.bills.map((b) => b.id === id ? { ...b, ...patch, id: b.id } : b) })),
-      deleteBill: (id) => set((state) => ({ bills: state.bills.filter((b) => b.id !== id) })),
-      setBills: (bills) => set({ bills }),
-      recordBillPayment: (billId, payment) =>
-        set((state) => ({
-          bills: state.bills.map((b) => b.id === billId ? { ...b, payments: [...b.payments, payment] } : b),
-          transactions: [state.transactions.find((t) => t.id === payment.transactionId)!,
-            ...state.transactions.filter((t) => t.id !== payment.transactionId),
-          ].filter(Boolean),
-          pockets: state.pockets.map((p) =>
-            p.id === payment.pocketId ? { ...p, balance: p.balance - payment.amount } : p
-          ),
-        })),
-      removeBillPayment: (billId, paymentId) =>
-        set((state) => {
-          const bill = state.bills.find((b) => b.id === billId);
-          const payment = bill?.payments.find((p) => p.id === paymentId);
-          if (!bill || !payment) return state;
-          return {
-            bills: state.bills.map((b) =>
-              b.id === billId ? { ...b, payments: b.payments.filter((p) => p.id !== paymentId) } : b
-            ),
-            transactions: state.transactions.filter((t) => t.id !== payment.transactionId),
-            pockets: state.pockets.map((p) =>
-              p.id === payment.pocketId ? { ...p, balance: p.balance + payment.amount } : p
-            ),
-          };
-        }),
     }),
     {
       name: "vinflow-storage",
-      version: 4,
+      version: 5,
       migrate: (persisted: unknown) => {
         if (!persisted || typeof persisted !== "object") return persisted as never;
         const p = persisted as Record<string, unknown>;
         return {
           pockets: Array.isArray(p.pockets) ? p.pockets : INITIAL_POCKETS,
           transactions: Array.isArray(p.transactions) ? p.transactions : [],
-          budgets: Array.isArray(p.budgets) ? p.budgets : SEED_BUDGETS,
+          budgets: Array.isArray(p.budgets)
+            ? (p.budgets as Array<Record<string, unknown>>)
+                .filter((b) => {
+                  const categoryId =
+                    typeof b.categoryId === "string" ? b.categoryId :
+                    typeof b.category === "string" ? b.category : "";
+                  return categoryId !== "__total__";
+                })
+                .map((b) => {
+                  const period = typeof b.period === "string" ? b.period : currentPeriod();
+                  const categoryId =
+                    typeof b.categoryId === "string" ? b.categoryId :
+                    typeof b.category === "string" ? b.category : "Other";
+                  return {
+                    id: typeof b.id === "string" ? b.id : `budget-${period}-${categoryId}`,
+                    categoryId,
+                    baseAmount:
+                      typeof b.baseAmount === "number" ? b.baseAmount :
+                      typeof b.amount === "number" ? b.amount : 0,
+                    period,
+                    startDate: typeof b.startDate === "string" ? b.startDate : `${period}-01`,
+                    topUps: Array.isArray(b.topUps) ? b.topUps : [],
+                    createdAt: typeof b.createdAt === "string" ? b.createdAt : `${period}-01`,
+                  };
+                })
+            : SEED_BUDGETS,
           goals: Array.isArray(p.goals) ? p.goals : SEED_GOALS,
           goalSavings: Array.isArray(p.goalSavings) ? p.goalSavings : SEED_GOAL_SAVINGS,
-          bills: Array.isArray(p.bills) ? p.bills : SEED_BILLS,
           budgetAlerts: Array.isArray(p.budgetAlerts) ? p.budgetAlerts : [],
           seenBudgetAlerts: Array.isArray(p.seenBudgetAlerts) ? p.seenBudgetAlerts : [],
         } as never;

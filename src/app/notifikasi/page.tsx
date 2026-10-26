@@ -34,8 +34,8 @@ export default function NotifikasiPage() {
     .map((k) => {
       const parsed = parseBudgetAlertKey(k);
       if (!parsed) return null;
-      const b = budgets.find((b) => b.category === parsed.category && b.period === parsed.period);
-      return { key: k, category: parsed.category, level: parsed.level, budget: b };
+      const b = budgets.find((b) => b.categoryId === parsed.categoryId && b.period === parsed.period);
+      return { key: k, category: parsed.categoryId, level: parsed.level, budget: b };
     })
     .filter(Boolean);
 

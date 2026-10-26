@@ -797,41 +797,41 @@ export const budgetHealth: InsightConfig = {
   trigger: (d) => {
     if (!d.budgets || d.budgets.length === 0) return false;
     const periodStr = d.startDate.toISOString().slice(0, 7);
-    const active = d.budgets.filter((b) => b.period === periodStr && b.amount > 0);
+    const active = d.budgets.filter((b) => b.period === periodStr && b.baseAmount + (b.topUps?.reduce((s,u)=>s+u.amount,0) ?? 0) > 0);
     if (active.length === 0) return false;
     return active.some((b) => {
-      const spent = b.category === "__total__"
+      const spent = b.categoryId === "__total__"
         ? d.totalExpense
-        : d.expenseByCat.get(b.category) || 0;
-      return (spent / b.amount) >= 0.8;
+        : d.expenseByCat.get(b.categoryId) || 0;
+      return (spent / (b.baseAmount + (b.topUps?.reduce((s,u)=>s+u.amount,0) ?? 0))) >= 0.8;
     });
   },
   generate: (d) => {
     const periodStr = d.startDate.toISOString().slice(0, 7);
-    const active = d.budgets?.filter((b) => b.period === periodStr && b.amount > 0) || [];
+    const active = d.budgets?.filter((b) => b.period === periodStr && b.baseAmount + (b.topUps?.reduce((s,u)=>s+u.amount,0) ?? 0) > 0) || [];
     const crossed = active.find((b) => {
-      const spent = b.category === "__total__"
+      const spent = b.categoryId === "__total__"
         ? d.totalExpense
-        : d.expenseByCat.get(b.category) || 0;
-      return (spent / b.amount) >= 0.8;
+        : d.expenseByCat.get(b.categoryId) || 0;
+      return (spent / (b.baseAmount + (b.topUps?.reduce((s,u)=>s+u.amount,0) ?? 0))) >= 0.8;
     }) || active[0];
 
-    const spent = crossed.category === "__total__"
+    const spent = crossed.categoryId === "__total__"
       ? d.totalExpense
-      : d.expenseByCat.get(crossed.category) || 0;
-    const pct = Math.round((spent / crossed.amount) * 100);
-    const name = crossed.category === "__total__" ? "Total" : crossed.category;
+      : d.expenseByCat.get(crossed.categoryId) || 0;
+    const pct = Math.round((spent / (crossed.baseAmount + (crossed.topUps?.reduce((s,u) => s + u.amount, 0) ?? 0))) * 100);
+    const name = crossed.categoryId === "__total__" ? "Total" : crossed.categoryId;
 
     const variants = [
       {
         title: `Anggaran ${name} Rawan`,
-        message: `Pengeluaran ${name} sudah mencapai ${pct}% dari batas ${formatCurrency(crossed.amount)}.`,
+        message: `Pengeluaran ${name} sudah mencapai ${pct}% dari batas ${formatCurrency(crossed.baseAmount + (crossed.topUps?.reduce((s,u)=>s+u.amount,0) ?? 0))}.`,
         details: `Terpakai ${formatCurrency(spent)} dari limit bulanan.`,
         icon: "AlertTriangle",
       },
       {
         title: `Peringatan Budget ${name}`,
-        message: `Anda memakai ${pct}% dari limit ${name} (${formatCurrency(spent)} dari ${formatCurrency(crossed.amount)}).`,
+        message: `Anda memakai ${pct}% dari limit ${name} (${formatCurrency(spent)} dari ${formatCurrency(crossed.baseAmount + (crossed.topUps?.reduce((s,u)=>s+u.amount,0) ?? 0))}).`,
         details: `Kurangi belanja di kategori ini untuk sisa periode.`,
         icon: "Shield",
       },

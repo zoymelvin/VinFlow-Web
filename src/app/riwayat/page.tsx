@@ -9,11 +9,13 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useFinanceStore, type Pocket, type Transaction } from "@/store/useFinanceStore";
+import { getSystemDate, getSystemTime } from "@/lib/date";
 import DateRangeSheet, { type DateRangeISO } from "@/components/DateRangeSheet";
 import CategoryIcon, { POCKET_ICONS } from "@/components/CategoryIcon";
 import TransactionDetailSheet from "@/components/TransactionDetailSheet";
 import { Overlay, Portal, GrabHandle, Z, useBackEntry, useLockBody } from "@/components/overlay";
 import Money, { useMoneyDisplay } from "@/components/Money";
+import PageHeader from "@/components/PageHeader";
 import {
   DEFAULT_HISTORY_FILTERS,
   activeChips,
@@ -221,8 +223,8 @@ export default function RiwayatPage() {
     addTransaction({
       ...t,
       id: `txn-${Date.now()}-${Math.floor(Math.random() * 1e6)}`,
-      date: new Date().toLocaleDateString("en-US", { month: "long", day: "numeric" }),
-      time: new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hourCycle: "h23" }),
+      date: getSystemDate(),
+      time: getSystemTime(),
     });
     if (pocket) {
       updatePocketBalance(
@@ -268,42 +270,41 @@ export default function RiwayatPage() {
 
 
       {/* Header: back + title only (+ working export) */}
-      <header className="relative flex items-center gap-3 mb-5">
-        <Link
-          href="/"
-          aria-label="Back to home"
-          className="w-10 h-10 rounded-full bg-white/5 border border-white/10 flex items-center justify-center hover:bg-white/10 active:scale-95 transition shrink-0"
-        >
-          <ArrowLeft className="w-5 h-5 text-white/80" />
-        </Link>
-        <div className="flex-1">
-          <h1 className="text-2xl font-bold tracking-tight text-white leading-tight">
-            {selectMode ? `${selected.length} selected` : "Transaction History"}
-          </h1>
-          <p className="text-[11px] font-semibold uppercase tracking-widest text-white/40 mt-1 mb-2">Log</p>
-          <div className="h-px bg-gradient-to-r from-blue-500/40 via-transparent to-transparent" />
-        </div>
-        {selectMode ? (
-          <button
-            type="button"
-            onClick={exitSelectMode}
-            className="text-xs font-semibold text-blue-400 hover:text-blue-300 min-h-[44px] px-2"
+      <PageHeader
+        title={selectMode ? `${selected.length} selected` : "Transaction History"}
+        label="LOG"
+        left={
+          <Link
+            href="/"
+            aria-label="Back to home"
+            className="w-10 h-10 rounded-full bg-white/5 border border-white/10 flex items-center justify-center hover:bg-white/10 active:scale-95 transition shrink-0"
           >
-            Cancel
-          </button>
-        ) : (
-          sorted.length > 0 && (
+            <ArrowLeft className="w-5 h-5 text-white/80" />
+          </Link>
+        }
+        right={
+          selectMode ? (
             <button
               type="button"
-              onClick={handleExport}
-              aria-label="Export to CSV"
-              className="w-10 h-10 rounded-full bg-white/5 border border-white/10 flex items-center justify-center hover:bg-white/10 active:scale-95 transition shrink-0"
+              onClick={exitSelectMode}
+              className="text-xs font-semibold text-blue-400 hover:text-blue-300 min-h-[44px] px-2"
             >
-              <Download className="w-5 h-5 text-white/70" />
+              Cancel
             </button>
+          ) : (
+            sorted.length > 0 && (
+              <button
+                type="button"
+                onClick={handleExport}
+                aria-label="Export to CSV"
+                className="w-10 h-10 rounded-full bg-white/5 border border-white/10 flex items-center justify-center hover:bg-white/10 active:scale-95 transition shrink-0"
+              >
+                <Download className="w-5 h-5 text-white/70" />
+              </button>
+            )
           )
-        )}
-      </header>
+        }
+      />
 
       {/* Filter row: single row — filter toggle + select-all lives in select bar */}
       <div className="relative mb-3">

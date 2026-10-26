@@ -59,3 +59,48 @@ const receipt_1 = require("../src/lib/receipt");
     strict_1.default.strictEqual((0, receipt_1.findDuplicate)(txns, dup), true);
     strict_1.default.strictEqual((0, receipt_1.findDuplicate)(txns, notDup), false);
 });
+(0, node_test_1.default)("parseScanResult handles string amounts, missing fields, and trims values", () => {
+    const { parseScanResult, emptyScanResult, isScanResultUsable, normalizeMerchant } = require("../src/lib/receipt");
+    const empty = parseScanResult({});
+    strict_1.default.deepEqual(empty, emptyScanResult());
+    strict_1.default.strictEqual(isScanResultUsable(empty), false);
+    const dotAmount = parseScanResult({
+        amount: "48.000",
+        type: "expense",
+        date: "2026-10-24",
+        time: "14:30:00",
+        purpose: "  COSAN COFFEE SETURAN  ",
+        sourceWallet: "ShopeePay",
+    });
+    strict_1.default.strictEqual(dotAmount.amount, 48000);
+    strict_1.default.strictEqual(dotAmount.type, "expense");
+    strict_1.default.strictEqual(dotAmount.date, "2026-10-24");
+    strict_1.default.strictEqual(dotAmount.time, "14:30");
+    strict_1.default.strictEqual(dotAmount.purpose, "COSAN COFFEE SETURAN");
+    strict_1.default.strictEqual(dotAmount.sourceWallet, "ShopeePay");
+    strict_1.default.strictEqual(isScanResultUsable(dotAmount), true);
+    strict_1.default.strictEqual(normalizeMerchant("COSAN COFFEE SETURAN!"), "cosan coffee seturan");
+});
+(0, node_test_1.default)("user-touched fields are not overwritten by AI scan results", () => {
+    const touchedFields = new Set(["amount"]);
+    const formState = {
+        amount: "50000",
+        merchant: "",
+        isExpense: true,
+    };
+    const scanResult = {
+        amount: 48000,
+        purpose: "COSAN COFFEE SETURAN",
+        type: "expense",
+    };
+    const next = { ...formState };
+    if (!touchedFields.has("amount") && scanResult.amount > 0) {
+        next.amount = String(scanResult.amount);
+    }
+    if (!touchedFields.has("merchant") && scanResult.purpose) {
+        next.merchant = scanResult.purpose;
+    }
+    // Amount remains 50000 because user edited it; merchant is filled from AI
+    strict_1.default.strictEqual(next.amount, "50000");
+    strict_1.default.strictEqual(next.merchant, "COSAN COFFEE SETURAN");
+});

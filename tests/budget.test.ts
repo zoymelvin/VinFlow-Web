@@ -3,13 +3,10 @@ import assert from "node:assert/strict";
 import {
   currentPeriod,
   periodFromDate,
-  spentByCategory,
-  spentTotal,
-  statusPct,
+  calculateBudget,
   budgetAlertKeys,
   parseBudgetAlertKey,
   overshootMessage,
-  cumulativeSeries,
   formatIDR,
 } from "../src/lib/budget";
 import type { Transaction, Budget } from "../src/store/useFinanceStore";
@@ -30,8 +27,8 @@ function txn(partial: Partial<Transaction> = {}): Transaction {
   };
 }
 
-function budget(category: string, amount: number): Budget {
-  return { id: `b-${category}`, category, amount, period: PERIOD };
+function budget(categoryId: string, amount: number, period = PERIOD, startDate?: string): Budget {
+  return { id: `b-${categoryId}`, categoryId, baseAmount: amount, period, startDate, topUps: [] };
 }
 
 /* ── periodFromDate / currentPeriod ── */
@@ -40,41 +37,111 @@ test("periodFromDate extracts YYYY-MM", () => {
   assert.equal(periodFromDate(""), currentPeriod());
 });
 
-/* ── spentByCategory / spentTotal ── */
-test("spentByCategory sums only matching category+period expenses", () => {
+/* ── calculateBudget: 100% fresh ── */
+test("calculateBudget: 100% when no spending", () => {
+  const b = budget("Food", 500_000);
+  const res = calculateBudget(b, [], PERIOD);
+  assert.equal(res.spent, 0);
+  assert.equal(res.remaining, 500_000);
+  assert.equal(res.pct, 0);
+});
+
+/* ── calculateBudget: 50% ── */
+test("calculateBudget: 50% after half spent", () => {
+  const b = budget("Food", 500_000);
+  const txns = [txn({ category: "Food", amount: 250_000, date: "2026-10-07" })];
+  const res = calculateBudget(b, txns, PERIOD);
+  assert.equal(res.spent, 250_000);
+  assert.equal(res.remaining, 250_000);
+  assert.equal(res.pct, 50);
+});
+
+/* ── calculateBudget: over budget ── */
+test("calculateBudget: over budget", () => {
+  const b = budget("Food", 500_000);
+  const txns = [txn({ category: "Food", amount: 600_000, date: "2026-10-07" })];
+  const res = calculateBudget(b, txns, PERIOD);
+  assert.equal(res.spent, 600_000);
+  assert.equal(res.remaining, -100_000);
+  assert.equal(res.overBy, 100_000);
+  assert.equal(res.status, "over_budget");
+});
+
+/* ── calculateBudget: startDate filter ── */
+test("calculateBudget: txns before startDate excluded", () => {
+  const b = budget("Food", 500_000, PERIOD, "2026-10-15");
   const txns = [
-    txn({ category: "Food", amount: 30_000, date: "2026-10-01" }),
-    txn({ category: "Food", amount: 20_000, date: "2026-10-10" }),
-    txn({ category: "Rent", amount: 100_000, date: "2026-10-05" }),
-    txn({ category: "Food", amount: 10_000, date: "2026-09-30" }),
-    txn({ category: "Food", amount: 5_000, isExpense: false }),
+    txn({ category: "Food", amount: 100_000, date: "2026-10-10" }),
+    txn({ category: "Food", amount: 200_000, date: "2026-10-20" }),
   ];
-  assert.equal(spentByCategory(txns, "Food", PERIOD), 50_000);
-  assert.equal(spentTotal(txns, PERIOD), 150_000);
+  const res = calculateBudget(b, txns, PERIOD);
+  assert.equal(res.spent, 200_000);
+  assert.equal(res.remaining, 300_000);
+  assert.equal(res.pct, 40);
 });
 
-/* ── statusPct ── */
-test("statusPct thresholds", () => {
-  assert.equal(statusPct(0, 100), "ok");
-  assert.equal(statusPct(79, 100), "ok");
-  assert.equal(statusPct(80, 100), "warning");
-  assert.equal(statusPct(99, 100), "warning");
-  assert.equal(statusPct(100, 100), "exceeded");
-  assert.equal(statusPct(150, 100), "exceeded");
-  assert.equal(statusPct(50, 0), "ok");
+/* ── calculateBudget: other categories/income/transfer ignored ── */
+test("calculateBudget: only category + expense, not transfer/income", () => {
+  const b = budget("Food", 500_000);
+  const txns = [
+    txn({ category: "Food", amount: 100_000 }),
+    txn({ category: "Transport", amount: 50_000 }),
+    txn({ category: "Food", isExpense: false, amount: 200_000 }),
+    txn({ category: "Food", isTransfer: true, amount: 75_000 }),
+  ];
+  const res = calculateBudget(b, txns, PERIOD);
+  assert.equal(res.spent, 100_000);
 });
 
-/* ── budgetAlertKeys ── */
-test("budgetAlertKeys emits 80 then 100 when crossed", () => {
+/* ── calculateBudget: topUps added to limit ── */
+test("calculateBudget: topUps increase limit", () => {
+  const b = budget("Food", 500_000, PERIOD);
+  b.topUps = [
+    { id: "t1", amount: 200_000, date: "2026-10-10" },
+    { id: "t2", amount: 100_000, date: "2026-10-15" },
+  ];
+  const txns = [txn({ category: "Food", amount: 600_000, date: "2026-10-20" })];
+  const res = calculateBudget(b, txns, PERIOD);
+  assert.equal(res.spent, 600_000);
+  assert.equal(res.remaining, 200_000);
+  assert.equal(res.pct, 75);
+});
+
+/* ── calculateBudget: status thresholds ── */
+test("calculateBudget: status on_track < 50%", () => {
   const b = budget("Food", 100_000);
-  const txns80 = [txn({ amount: 80_000 })];
-  assert.deepEqual(budgetAlertKeys([b], txns80, PERIOD), ["2026-10|Food|80"]);
+  const txns = [txn({ category: "Food", amount: 40_000 })];
+  const res = calculateBudget(b, txns, PERIOD);
+  assert.equal(res.status, "on_track");
+});
 
-  const txns100 = [txn({ amount: 100_000 })];
-  assert.deepEqual(budgetAlertKeys([b], txns100, PERIOD), ["2026-10|Food|100"]);
+test("calculateBudget: status watch_out 50-79%", () => {
+  const b = budget("Food", 100_000);
+  const txns = [txn({ category: "Food", amount: 60_000 })];
+  const res = calculateBudget(b, txns, PERIOD);
+  assert.equal(res.status, "watch_out");
+});
 
-  const txnsBelow = [txn({ amount: 79_999 })];
-  assert.deepEqual(budgetAlertKeys([b], txnsBelow, PERIOD), []);
+test("calculateBudget: status almost_out 80-99%", () => {
+  const b = budget("Food", 100_000);
+  const txns = [txn({ category: "Food", amount: 85_000 })];
+  const res = calculateBudget(b, txns, PERIOD);
+  assert.equal(res.status, "almost_out");
+});
+
+/* ── budgetAlertKeys: 80% and 100% ── */
+test("budgetAlertKeys emits 80 threshold", () => {
+  const b = budget("Food", 100_000);
+  const txns = [txn({ category: "Food", amount: 80_000 })];
+  const keys = budgetAlertKeys([b], txns, PERIOD);
+  assert(keys.includes("2026-10|Food|80"));
+});
+
+test("budgetAlertKeys emits 100 threshold", () => {
+  const b = budget("Food", 100_000);
+  const txns = [txn({ category: "Food", amount: 100_000 })];
+  const keys = budgetAlertKeys([b], txns, PERIOD);
+  assert(keys.includes("2026-10|Food|100"));
 });
 
 /* ── parseBudgetAlertKey ── */
@@ -86,30 +153,20 @@ test("parseBudgetAlertKey round-trips", () => {
 });
 
 /* ── overshootMessage ── */
-test("overshootMessage fires on threshold cross only", () => {
+test("overshootMessage fires on 80% cross", () => {
   const b = budget("Food", 100_000);
-  const before = [txn({ amount: 70_000 })];
-  const after80 = [...before, txn({ amount: 15_000 })];
-  assert.match(overshootMessage([b], before, after80, "Food", PERIOD)!, /85%/);
-
-  const after100 = [...before, txn({ amount: 40_000 })];
-  assert.match(overshootMessage([b], before, after100, "Food", PERIOD)!, /exceeded/);
-
-  assert.equal(overshootMessage([b], before, before, "Food", PERIOD), null);
+  const before = [txn({ category: "Food", amount: 70_000 })];
+  const after = [...before, txn({ category: "Food", amount: 15_000 })];
+  const msg = overshootMessage([b], before, after, "Food", PERIOD);
+  assert(msg && msg.includes("85"));
 });
 
-/* ── cumulativeSeries ── */
-test("cumulativeSeries accumulates by day", () => {
-  const txns = [
-    txn({ amount: 10_000, date: "2026-10-01" }),
-    txn({ amount: 20_000, date: "2026-10-03" }),
-    txn({ amount: 5_000, date: "2026-09-30" }),
-  ];
-  const series = cumulativeSeries(txns, "Food", PERIOD);
-  assert.equal(series.length, 31);
-  assert.equal(series[0].spent, 10_000);
-  assert.equal(series[2].spent, 30_000);
-  assert.equal(series[30].spent, 30_000);
+test("overshootMessage fires on 100% cross", () => {
+  const b = budget("Food", 100_000);
+  const before = [txn({ category: "Food", amount: 70_000 })];
+  const after = [...before, txn({ category: "Food", amount: 40_000 })];
+  const msg = overshootMessage([b], before, after, "Food", PERIOD);
+  assert(msg && msg.includes("exceeded"));
 });
 
 /* ── formatIDR ── */

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { motion } from "framer-motion";
 import Link from "next/link";
 import {
@@ -105,24 +105,40 @@ export default function GoalsPage() {
 
   useEffect(() => { setMounted(true); }, []);
 
-  const savedOf = (g: Goal) => goalSavingsTotal(goalSavingsForGoal(goalSavings, g.id));
-  const bucketOf = (g: Goal) => goalBucket(g, savedOf(g));
+  const savedOf = useCallback(
+    (g: Goal) => goalSavingsTotal(goalSavingsForGoal(goalSavings, g.id)),
+    [goalSavings]
+  );
+  const bucketOf = useCallback(
+    (g: Goal) => goalBucket(g, savedOf(g)),
+    [savedOf]
+  );
 
   const filteredGoals = useMemo(
     () => goals.filter((g) => bucketOf(g) === activeTab),
-    // bucketOf depends on goals+goalSavings only
-    [goals, goalSavings, activeTab]
+    [goals, activeTab, bucketOf]
   );
 
-  const activeGoals = useMemo(() => goals.filter((g) => bucketOf(g) === "active"), [goals, goalSavings]);
-  const totalTarget = useMemo(() => activeGoals.reduce((sum, g) => sum + g.target, 0), [activeGoals]);
-  const totalSaved = useMemo(() => activeGoals.reduce((sum, g) => sum + savedOf(g), 0), [activeGoals, goalSavings]);
+  const activeGoals = useMemo(
+    () => goals.filter((g) => bucketOf(g) === "active"),
+    [goals, bucketOf]
+  );
+  const totalTarget = useMemo(
+    () => activeGoals.reduce((sum, g) => sum + g.target, 0),
+    [activeGoals]
+  );
+  const totalSaved = useMemo(
+    () => activeGoals.reduce((sum, g) => sum + savedOf(g), 0),
+    [activeGoals, savedOf]
+  );
 
   const tabCounts = useMemo(() => {
     const counts = { active: 0, completed: 0, archived: 0 };
-    goals.forEach((g) => { counts[bucketOf(g)] += 1; });
+    goals.forEach((g) => {
+      counts[bucketOf(g)] += 1;
+    });
     return counts;
-  }, [goals, goalSavings]);
+  }, [goals, bucketOf]);
 
   if (!mounted) return null;
 

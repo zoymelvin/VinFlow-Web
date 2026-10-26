@@ -1,173 +1,253 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { motion } from "framer-motion";
+import { useEffect, useState, useMemo, useRef } from "react";
 import Link from "next/link";
-import { Wallet, Bell, PieChart, Trophy, CalendarClock, History } from "lucide-react";
+import {
+  Bell,
+  Eye,
+  EyeOff,
+  PieChart,
+  Trophy,
+  History,
+  LayoutGrid,
+  ArrowUp,
+  ArrowLeftRight,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useFinanceStore } from "@/store/useFinanceStore";
+import { useFinanceStore, type Transaction } from "@/store/useFinanceStore";
 import { useSettingsStore } from "@/store/useSettingsStore";
 import { getGreeting } from "@/lib/settings";
 import { parseDateStr } from "@/lib/insights/utils";
-import { budgetAlertKeys, currentPeriod } from "@/lib/budget";
-import CategoryIcon from "@/components/CategoryIcon";
-import Money from "@/components/Money";
+import Money, { useMoneyDisplay } from "@/components/Money";
+import { categoryIcon } from "@/components/CategoryIcon";
+import PageHeader from "@/components/PageHeader";
+import Avatar from "@/components/Avatar";
+
+let hasAnimated = false;
 
 export default function DashboardPage() {
   const pockets = useFinanceStore((s) => s.pockets);
   const transactions = useFinanceStore((s) => s.transactions);
-  const budgets = useFinanceStore((s) => s.budgets);
   const profile = useSettingsStore((s) => s.profile);
-  const budgetAlerts = useFinanceStore((s) => s.budgetAlerts);
-  const seenBudgetAlerts = useFinanceStore((s) => s.seenBudgetAlerts);
-  const addBudgetAlert = useFinanceStore((s) => s.addBudgetAlert);
+  const hideBalance = useSettingsStore((s) => s.hideBalance);
+  const setHideBalance = useSettingsStore((s) => s.setHideBalance);
   const [hasMounted, setHasMounted] = useState(false);
-
-  useEffect(() => { setHasMounted(true); }, []);
+  const balanceRef = useRef<HTMLDivElement>(null);
+  const { hidden, text } = useMoneyDisplay();
 
   useEffect(() => {
-    if (!hasMounted) return;
-    const keys = budgetAlertKeys(budgets, transactions, currentPeriod());
-    keys.forEach((k) => addBudgetAlert(k));
-  }, [budgets, transactions, hasMounted, addBudgetAlert]);
+    setHasMounted(true);
+    if (!hasAnimated) {
+        hasAnimated = true;
+    }
+  }, []);
+
+  const totalBalance = useMemo(() => pockets.reduce((sum, p) => sum + p.balance, 0), [pockets]);
+
+  // Animate balance
+  useEffect(() => {
+    if (balanceRef.current && !hidden) {
+        const start = 0;
+        const end = totalBalance;
+        const startTime = performance.now();
+        const duration = 700;
+        const step = (now: number) => {
+            const progress = Math.min((now - startTime) / duration, 1);
+            const val = start + (end - start) * (progress < 0.5 ? 4*progress*progress*progress : 1 - Math.pow(-2*progress+2, 3)/2);
+            if (balanceRef.current) balanceRef.current.textContent = text(Math.round(val));
+            if (progress < 1) requestAnimationFrame(step);
+        };
+        requestAnimationFrame(step);
+    } else if (balanceRef.current && hidden) {
+        balanceRef.current.textContent = text(totalBalance);
+    }
+  }, [totalBalance, text, hidden]);
+
+  const { monthIncome, monthExpense, monthNet } = useMemo(() => {
+    const now = new Date();
+    const start = new Date(now.getFullYear(), now.getMonth(), 1);
+    const txns = transactions.filter((t) => parseDateStr(t.date) >= start);
+    const income = txns.filter((t) => !t.isExpense && !t.isTransfer).reduce((s, t) => s + t.amount, 0);
+    const expense = txns.filter((t) => t.isExpense && !t.isTransfer).reduce((s, t) => s + t.amount, 0);
+    return { monthIncome: income, monthExpense: expense, monthNet: income - expense };
+  }, [transactions]);
+
+  const sparklineData = useMemo(() => {
+    const points: number[] = [];
+    const now = new Date();
+    for (let i = 29; i >= 0; i--) {
+        const d = new Date(now); d.setDate(d.getDate() - i); d.setHours(23,59,59,999);
+        const txnsAfter = transactions.filter(t => parseDateStr(t.date) > d);
+        let balanceAtD = totalBalance;
+        txnsAfter.forEach(t => {
+            if (t.isTransfer) return;
+            if (t.isExpense) balanceAtD += t.amount;
+            else balanceAtD -= t.amount;
+        });
+        points.push(balanceAtD);
+    }
+    return points;
+  }, [totalBalance, transactions]);
+
+  const recentActivity = useMemo(() => {
+    const recent = transactions.slice(0, 5);
+    const groups: { label: string; items: Transaction[] }[] = [];
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1);
+    const yesterdayStr = yesterday.toISOString().slice(0, 10);
+    recent.forEach(t => {
+      let label = "";
+      if (t.date === todayStr) label = "TODAY";
+      else if (t.date === yesterdayStr) label = "YESTERDAY";
+      else {
+        const d = parseDateStr(t.date);
+        label = d.toLocaleDateString("en-US", { month: "short", day: "numeric" }).toUpperCase();
+      }
+      const group = groups.find(g => g.label === label);
+      if (group) group.items.push(t);
+      else groups.push({ label, items: [t] });
+    });
+    return groups;
+  }, [transactions]);
 
   if (!hasMounted) return null;
 
-  const name = profile.name;
-  const greeting = getGreeting(new Date().getHours());
-
-  const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
-  const monthTxns = transactions.filter((t) => parseDateStr(t.date) >= monthStart);
-
-  const totalBalance = pockets.reduce((sum, p) => sum + p.balance, 0);
-  const monthExpense = monthTxns
-    .filter((t) => t.isExpense && !t.isTransfer)
-    .reduce((s, t) => s + t.amount, 0);
-  const monthIncome = monthTxns
-    .filter((t) => !t.isExpense && !t.isTransfer)
-    .reduce((s, t) => s + t.amount, 0);
-  const recent = transactions.slice(0, 4);
-  const unviewedCount = transactions.filter((t) => !t.viewed).length;
-  const unseenBudgetAlerts = budgetAlerts.filter((k) => !seenBudgetAlerts.includes(k)).length;
-  const totalUnseen = unviewedCount + unseenBudgetAlerts;
+  const anim = (delay: number) => ({
+      animationName: 'entrance',
+      animationDuration: '260ms',
+      animationTimingFunction: 'cubic-bezier(.2,.8,.2,1)',
+      animationDelay: `${delay}ms`,
+      animationFillMode: 'backwards' as const
+  });
 
   return (
-<motion.main
-       className="relative min-h-screen bg-background text-foreground pb-28 px-4 pt-4"
-       initial={{ opacity: 0, y: 20 }}
-       animate={{ opacity: 1, y: 0 }}
-       transition={{ duration: 0.3 }}
-     >
-
-
-      {/* Header — minimal: greeting + name, bell only action */}
-      <header className="relative mb-6">
-        <div className="flex items-start justify-between gap-3 mb-4">
-          <div className="min-w-0">
-            <h1 className="text-2xl font-bold tracking-tight text-white truncate">{name}</h1>
-            <p className="text-[11px] font-semibold uppercase tracking-widest text-white/40 mt-1">{greeting}</p>
-          </div>
-          <Link
-            href="/notifikasi"
-            className="relative w-10 h-10 shrink-0 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-white/60 hover:text-white active:scale-90 transition"
-            aria-label="Notifications"
-          >
-            <Bell className="w-[18px] h-[18px]" strokeWidth={1.8} />
-            {totalUnseen > 0 && (
-              <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-red-500 rounded-full" />
-            )}
+    <main className="relative min-h-screen bg-[#0b0d12] text-white pb-32 font-space overflow-x-hidden">
+      <PageHeader 
+        className="animate-entrance"
+        title={profile.name} 
+        label={getGreeting(new Date().getHours()).toUpperCase()}
+        left={
+          <Link href="/profile" aria-label="Open profile" className="transition active:scale-95">
+            <Avatar name={profile.name} photo={profile.photo} size="md" />
           </Link>
-        </div>
-        <div className="h-px bg-gradient-to-r from-blue-500/40 via-transparent to-transparent" />
-      </header>
+        }
+        right={
+            <Link href="/notifikasi" className="relative w-11 h-11 rounded-full bg-[#151922] border border-[#232938] flex items-center justify-center transition active:scale-95">
+                <Bell className="w-5 h-5 text-white" strokeWidth={1.8} />
+                {transactions.some(t => !t.viewed) && <span className="absolute top-3 right-3 w-2 h-2 bg-[#ff6b7a] rounded-full border-2 border-[#151922]" />}
+            </Link>
+        }
+      />
 
-      {/* Balance */}
-      <section className="relative mb-6 bg-white/5 border border-white/10 rounded-3xl p-6 shadow-xl">
-        <div className="flex items-center gap-2 mb-2">
-          <Wallet className="w-4 h-4 text-blue-500" />
-          <p className="text-xs font-semibold text-white/50 uppercase tracking-widest">Total Balance</p>
-        </div>
-        <Money value={totalBalance} className="text-3xl font-bold tracking-tight text-white" />
-      </section>
+      <div className="px-4 pt-3 space-y-3">
+        <section style={anim(60)} className="relative rounded-[24px] p-5 border border-[#2c4a8a] bg-gradient-to-br from-[#21468f] from-0% via-[#16295a] via-55% to-[#111829] to-100% overflow-hidden">
+            <div className="flex items-center justify-between mb-1.5">
+                <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-[#c4d4f5]">TOTAL BALANCE</p>
+                <button onClick={() => setHideBalance(!hideBalance)} className="w-11 h-11 -my-2.5 -mr-2 rounded-full bg-white/12 flex items-center justify-center transition active:scale-95">
+                    {hideBalance ? <EyeOff className="w-5 h-5 text-white" /> : <Eye className="w-5 h-5 text-white" />}
+                </button>
+            </div>
+            <div className="flex items-end justify-between">
+                <div className="text-[34px] font-bold tracking-[-0.01em] leading-tight tabular-nums" ref={balanceRef} />
+                <div className="w-[104px] h-11 shrink-0 ml-4">
+                    <Sparkline data={sparklineData} width={104} height={44} color="#8fc0ff" />
+                </div>
+            </div>
+        </section>
 
-      {/* Income / Expense */}
-      <section className="relative grid grid-cols-2 gap-3 mb-6">
-        <div className="rounded-2xl bg-white/5 border border-white/10 p-4">
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-xs font-semibold text-white/50 uppercase tracking-widest">Income</p>
-            <span className="w-6 h-6 rounded-lg bg-green-500/12 flex items-center justify-center">
-              <Wallet className="w-3.5 h-3.5 text-green-500" strokeWidth={2.5} />
-            </span>
-          </div>
-          <Money value={monthIncome} className="text-lg font-bold tracking-tight text-white" />
-          <p className="text-[11px] text-white/40 mt-0.5">This month</p>
-        </div>
+        <section style={anim(120)} className="bg-[#151922] border border-[#232938] rounded-[20px] py-4 px-[18px]">
+            <div className="flex items-center justify-between mb-3">
+                <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-[#9aa3b2]">THIS MONTH</p>
+                {!hidden && <p className={cn("text-[13px] font-semibold", monthNet >= 0 ? "text-[#3ddc97]" : "text-[#ff6b7a]")}>Net {monthNet >= 0 ? "+" : ""}<Money value={monthNet} /></p>}
+            </div>
+            <div className="h-2 w-full flex rounded-full overflow-hidden bg-[#232938] gap-[3px] mb-3">
+                <div className="h-full bg-[#3ddc97] origin-left transition-transform duration-500 delay-[200ms]" style={{ flex: Math.max(0.05, monthIncome / (monthIncome + monthExpense || 1)), transform: 'scaleX(1)' }} />
+                <div className="h-full bg-[#ff6b7a] origin-left transition-transform duration-500 delay-[280ms]" style={{ flex: Math.max(0.05, monthExpense / (monthIncome + monthExpense || 1)), transform: 'scaleX(1)' }} />
+            </div>
+            <div className="flex items-center justify-between">
+                <div><p className="text-xs text-[#9aa3b2] mb-0.5">Income</p><p className="text-base font-semibold text-[#3ddc97]"><Money value={monthIncome} /></p></div>
+                <div className="text-right"><p className="text-xs text-[#9aa3b2] mb-0.5">Expense</p><p className="text-base font-semibold text-[#ff6b7a]"><Money value={monthExpense} /></p></div>
+            </div>
+        </section>
 
-        <div className="rounded-2xl bg-white/5 border border-white/10 p-4">
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-xs font-semibold text-white/50 uppercase tracking-widest">Expense</p>
-            <span className="w-6 h-6 rounded-lg bg-red-500/12 flex items-center justify-center">
-              <Wallet className="w-3.5 h-3.5 text-red-500" strokeWidth={2.5} />
-            </span>
-          </div>
-          <Money value={monthExpense} className="text-lg font-bold tracking-tight text-white" />
-          <p className="text-[11px] text-white/40 mt-0.5">This month</p>
-        </div>
-      </section>
+        <section style={anim(180)} className="flex gap-2">
+            {[
+                { label: "Budgets", href: "/budgets", icon: PieChart, color: "#6ea4ff" },
+                { label: "Goals", href: "/goals", icon: Trophy, color: "#ffa94d" },
+                { label: "History", href: "/riwayat", icon: History, color: "#a78bfa" },
+                { label: "Others", href: "/others", icon: LayoutGrid, color: "#ffffff", alpha: 0.08 },
+            ].map((item) => (
+                <Link key={item.label} href={item.href} className="flex-1 min-h-[76px] bg-[#151922] border border-[#232938] rounded-2xl flex flex-col items-center justify-center gap-2 transition active:scale-[0.97] duration-90">
+                    <div className="w-[34px] h-[34px] rounded-[11px] flex items-center justify-center" style={{ backgroundColor: `${item.color}${item.alpha ? '14' : '29'}` }}>
+                        <item.icon className="w-[18px] h-[18px]" style={{ color: item.color }} strokeWidth={1.8} />
+                    </div>
+                    <span className="text-xs font-medium text-white">{item.label}</span>
+                </Link>
+            ))}
+        </section>
 
-      {/* Actions */}
-      <section className="relative grid grid-cols-4 gap-3 mb-8">
-        <Link
-          href="/budgets"
-          className="flex flex-col items-center justify-center p-3 rounded-2xl bg-white/5 backdrop-blur-xl border border-white/10 hover:bg-white/10 transition-all active:scale-95"
-        >
-          <PieChart className="w-6 h-6 text-blue-400" />
-          <span className="text-xs text-white/70 font-medium mt-2">Budgets</span>
-        </Link>
-        <Link
-          href="/goals"
-          className="flex flex-col items-center justify-center p-3 rounded-2xl bg-white/5 backdrop-blur-xl border border-white/10 hover:bg-white/10 transition-all active:scale-95"
-        >
-          <Trophy className="w-6 h-6 text-blue-400" />
-          <span className="text-xs text-white/70 font-medium mt-2">Goals</span>
-        </Link>
-        <Link
-          href="/bills"
-          className="flex flex-col items-center justify-center p-3 rounded-2xl bg-white/5 backdrop-blur-xl border border-white/10 hover:bg-white/10 transition-all active:scale-95"
-        >
-          <CalendarClock className="w-6 h-6 text-blue-400" />
-          <span className="text-xs text-white/70 font-medium mt-2">Bills</span>
-        </Link>
-        <Link
-          href="/riwayat"
-          className="flex flex-col items-center justify-center p-3 rounded-2xl bg-white/5 backdrop-blur-xl border border-white/10 hover:bg-white/10 transition-all active:scale-95"
-        >
-          <History className="w-6 h-6 text-blue-400" />
-          <span className="text-xs text-white/70 font-medium mt-2">History</span>
-        </Link>
-      </section>
+        <section>
+            <div style={anim(240)} className="flex items-center justify-between px-0.5 mb-2.5 pt-4">
+                <h2 className="text-base font-semibold">Recent activity</h2>
+                <Link href="/riwayat" className="text-[13px] font-medium text-[#6ea4ff] min-h-[44px] flex items-center transition active:scale-95">View all</Link>
+            </div>
+            <div style={anim(300)} className="bg-[#151922] border border-[#232938] rounded-[20px] overflow-hidden">
+                {recentActivity.map((group, gIdx) => (
+                    <div key={group.label} className="border-t border-[#232938] first:border-0" style={anim(300 + gIdx * 40)}>
+                        <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-[#9aa3b2] pt-3 px-[14px] pb-1">{group.label}</p>
+                        {group.items.map(t => {
+                            const Icon = t.isTransfer ? ArrowLeftRight : (t.isExpense ? categoryIcon(t.category) : ArrowUp);
+                            const color = t.isTransfer ? "#6ea4ff" : (t.isExpense ? "#ffa94d" : "#3ddc97");
+                            const isGeneric = !t.name || t.name.toLowerCase() === 'transaction';
+                            return (
+                                <div key={t.id} className="flex items-center gap-3 py-3 px-[14px] transition active:bg-white/5 active:scale-[0.97] duration-90">
+                                    <div className="w-[34px] h-[34px] rounded-[11px] flex items-center justify-center shrink-0" style={{ backgroundColor: `${color}29` }}>
+                                        <Icon className="w-[18px] h-[18px]" style={{ color }} strokeWidth={1.8} />
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <p className="text-sm font-semibold truncate">{isGeneric ? t.category : t.name}</p>
+                                        <p className="text-xs text-[#9aa3b2] truncate">{t.isTransfer ? `${pockets.find(p => p.id === t.pocketId)?.name} → ${pockets.find(p => p.id === t.transferToPocketId)?.name}` : `${pockets.find(p => p.id === t.pocketId)?.name} · ${t.time}`}</p>
+                                    </div>
+                                    <p className="text-base font-semibold text-right shrink-0">
+                                        <Money value={t.amount} prefix={t.isTransfer ? "" : (t.isExpense ? "-" : "+")} />
+                                    </p>
+                                </div>
+                            );
+                        })}
+                    </div>
+                ))}
+            </div>
+        </section>
+      </div>
+    </main>
+  );
+}
 
-      {/* Transactions */}
-      <section className="relative">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-base font-semibold">Recent Activity</h2>
-          <Link href="/riwayat" className="text-blue-500 text-xs font-semibold">View All</Link>
-        </div>
-        <ul className="rounded-3xl bg-white/5 border border-white/10 divide-y divide-white/5 overflow-hidden">
-          {recent.map((t) => (
-            <li key={t.id} className="flex items-center gap-3 p-4">
-              <CategoryIcon category={t.category} />
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold truncate">{t.name}</p>
-                <p className="text-xs text-white/40">{t.category} • {t.time}</p>
-              </div>
-              <p className={cn("text-sm font-bold", t.isExpense ? "text-white" : "text-green-500")}>
-                <Money value={t.amount} prefix={t.isExpense ? "-" : "+"} />
-              </p>
-            </li>
-          ))}
-        </ul>
-      </section>
-    </motion.main>
+function Sparkline({ data, width, height, color }: { data: number[]; width: number; height: number; color: string }) {
+  const min = Math.min(...data);
+  const max = Math.max(...data);
+  const range = max - min || 1;
+  const padding = 2;
+
+  const points = data.map((val, i) => {
+    const x = (i / (data.length - 1)) * (width - padding * 2) + padding;
+    const y = height - ((val - min) / range) * (height - padding * 2) - padding;
+    return `${x},${y}`;
+  }).join(" ");
+
+  return (
+    <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
+      <polyline
+        fill="none"
+        stroke={color}
+        strokeWidth="2.2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeDasharray="1000"
+        strokeDashoffset="1000"
+        points={points}
+        style={{ animation: 'draw 700ms ease-out forwards' }}
+      />
+    </svg>
   );
 }

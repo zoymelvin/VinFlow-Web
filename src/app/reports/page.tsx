@@ -179,11 +179,9 @@ export default function LaporanPage() {
     [transactions, selectedPocket]
   );
 
-  const budgets = useFinanceStore((s) => s.budgets);
-
   const insightData = useMemo(
-    () => generateInsightData(filteredTxns, pockets, insightRange.start, insightRange.end, pocketTxns, budgets),
-    [filteredTxns, pockets, insightRange, pocketTxns, budgets]
+    () => generateInsightData(filteredTxns, pockets, insightRange.start, insightRange.end, pocketTxns),
+    [filteredTxns, pockets, insightRange, pocketTxns]
   );
 
   const insights = useMemo(() => evaluateInsights(insightData), [insightData]);

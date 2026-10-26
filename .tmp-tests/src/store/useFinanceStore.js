@@ -3,15 +3,15 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.useFinanceStore = void 0;
 const zustand_1 = require("zustand");
 const middleware_1 = require("zustand/middleware");
+const date_1 = require("../lib/date");
 const INITIAL_POCKETS = [
     { id: "p1", name: "BCA", category: "Bank", balance: 25000000, iconName: "Building" },
     { id: "p2", name: "ShopeePay", category: "E-Wallet", balance: 850000, iconName: "Smartphone" },
     { id: "p3", name: "Uang Tunai", category: "Cash", balance: 450000, iconName: "Coins" },
 ];
 const SEED_BUDGETS = [
-    { id: "b-seed-total", category: "__total__", amount: 5000000, period: currentPeriod() },
-    { id: "b-seed-makan", category: "Food", amount: 1500000, period: currentPeriod() },
-    { id: "b-seed-transport", category: "Transport", amount: 500000, period: currentPeriod() },
+    { id: "b-seed-food", categoryId: "Food", baseAmount: 1500000, period: currentPeriod(), startDate: currentDay(), createdAt: currentDay(), topUps: [] },
+    { id: "b-seed-transport", categoryId: "Transport", baseAmount: 500000, period: currentPeriod(), startDate: currentDay(), createdAt: currentDay(), topUps: [] },
 ];
 const SEED_GOALS = [
     { id: "g-seed-laptop", name: "New Laptop", target: 12000000, deadline: futurePeriod(6), color: "#3b82f6", iconName: "Trophy", status: "active", createdAt: new Date().toISOString(), pocketId: "p1" },
@@ -118,8 +118,8 @@ exports.useFinanceStore = (0, zustand_1.create)()((0, middleware_1.persist)((set
             isTransfer: true,
             pocketId: from,
             transferToPocketId: to,
-            time: new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hourCycle: "h23" }),
-            date: new Date().toLocaleDateString("en-US", { month: "long", day: "numeric" }),
+            time: (0, date_1.getSystemTime)(),
+            date: (0, date_1.getSystemDate)(),
             note: note,
             goalAllocation: goalId ? [{ goalId, amount: Math.round(amount) }] : undefined,
         };
@@ -195,6 +195,9 @@ exports.useFinanceStore = (0, zustand_1.create)()((0, middleware_1.persist)((set
     addBudget: (b) => set((state) => ({ budgets: [...state.budgets, b] })),
     updateBudget: (id, patch) => set((state) => ({ budgets: state.budgets.map((b) => b.id === id ? { ...b, ...patch, id: b.id } : b) })),
     deleteBudget: (id) => set((state) => ({ budgets: state.budgets.filter((b) => b.id !== id) })),
+    topUpBudget: (id, amount) => set((state) => ({
+        budgets: state.budgets.map((b) => b.id === id ? { ...b, topUps: [...(b.topUps ?? []), { id: `topup-${Date.now()}`, amount, date: new Date().toISOString().slice(0, 10) }] } : b),
+    })),
     setBudgets: (budgets) => set({ budgets }),
     /* budget alerts */
     addBudgetAlert: (key) => set((state) => ({
@@ -253,7 +256,7 @@ exports.useFinanceStore = (0, zustand_1.create)()((0, middleware_1.persist)((set
     }),
 }), {
     name: "vinflow-storage",
-    version: 4,
+    version: 5,
     migrate: (persisted) => {
         if (!persisted || typeof persisted !== "object")
             return persisted;
@@ -261,7 +264,29 @@ exports.useFinanceStore = (0, zustand_1.create)()((0, middleware_1.persist)((set
         return {
             pockets: Array.isArray(p.pockets) ? p.pockets : INITIAL_POCKETS,
             transactions: Array.isArray(p.transactions) ? p.transactions : [],
-            budgets: Array.isArray(p.budgets) ? p.budgets : SEED_BUDGETS,
+            budgets: Array.isArray(p.budgets)
+                ? p.budgets
+                    .filter((b) => {
+                    const categoryId = typeof b.categoryId === "string" ? b.categoryId :
+                        typeof b.category === "string" ? b.category : "";
+                    return categoryId !== "__total__";
+                })
+                    .map((b) => {
+                    const period = typeof b.period === "string" ? b.period : currentPeriod();
+                    const categoryId = typeof b.categoryId === "string" ? b.categoryId :
+                        typeof b.category === "string" ? b.category : "Other";
+                    return {
+                        id: typeof b.id === "string" ? b.id : `budget-${period}-${categoryId}`,
+                        categoryId,
+                        baseAmount: typeof b.baseAmount === "number" ? b.baseAmount :
+                            typeof b.amount === "number" ? b.amount : 0,
+                        period,
+                        startDate: typeof b.startDate === "string" ? b.startDate : `${period}-01`,
+                        topUps: Array.isArray(b.topUps) ? b.topUps : [],
+                        createdAt: typeof b.createdAt === "string" ? b.createdAt : `${period}-01`,
+                    };
+                })
+                : SEED_BUDGETS,
             goals: Array.isArray(p.goals) ? p.goals : SEED_GOALS,
             goalSavings: Array.isArray(p.goalSavings) ? p.goalSavings : SEED_GOAL_SAVINGS,
             bills: Array.isArray(p.bills) ? p.bills : SEED_BILLS,
