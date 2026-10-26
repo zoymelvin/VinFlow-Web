@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo, useRef } from "react";
+import { useEffect, useState, useMemo } from "react";
 import Link from "next/link";
 import {
   Bell,
@@ -18,7 +18,7 @@ import { useFinanceStore, type Transaction } from "@/store/useFinanceStore";
 import { useSettingsStore } from "@/store/useSettingsStore";
 import { getGreeting } from "@/lib/settings";
 import { parseDateStr } from "@/lib/insights/utils";
-import Money, { useMoneyDisplay } from "@/components/Money";
+import Money from "@/components/Money";
 import { categoryIcon } from "@/components/CategoryIcon";
 import PageHeader from "@/components/PageHeader";
 import Avatar from "@/components/Avatar";
@@ -32,8 +32,6 @@ export default function DashboardPage() {
   const hideBalance = useSettingsStore((s) => s.hideBalance);
   const setHideBalance = useSettingsStore((s) => s.setHideBalance);
   const [hasMounted, setHasMounted] = useState(false);
-  const balanceRef = useRef<HTMLDivElement>(null);
-  const { hidden, text } = useMoneyDisplay();
 
   useEffect(() => {
     setHasMounted(true);
@@ -44,25 +42,6 @@ export default function DashboardPage() {
 
   const totalBalance = useMemo(() => pockets.reduce((sum, p) => sum + p.balance, 0), [pockets]);
 
-  // Animate balance
-  useEffect(() => {
-    if (balanceRef.current && !hidden) {
-        const start = 0;
-        const end = totalBalance;
-        const startTime = performance.now();
-        const duration = 700;
-        const step = (now: number) => {
-            const progress = Math.min((now - startTime) / duration, 1);
-            const val = start + (end - start) * (progress < 0.5 ? 4*progress*progress*progress : 1 - Math.pow(-2*progress+2, 3)/2);
-            if (balanceRef.current) balanceRef.current.textContent = text(Math.round(val));
-            if (progress < 1) requestAnimationFrame(step);
-        };
-        requestAnimationFrame(step);
-    } else if (balanceRef.current && hidden) {
-        balanceRef.current.textContent = text(totalBalance);
-    }
-  }, [totalBalance, text, hidden]);
-
   const { monthIncome, monthExpense, monthNet } = useMemo(() => {
     const now = new Date();
     const start = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -71,23 +50,6 @@ export default function DashboardPage() {
     const expense = txns.filter((t) => t.isExpense && !t.isTransfer).reduce((s, t) => s + t.amount, 0);
     return { monthIncome: income, monthExpense: expense, monthNet: income - expense };
   }, [transactions]);
-
-  const sparklineData = useMemo(() => {
-    const points: number[] = [];
-    const now = new Date();
-    for (let i = 29; i >= 0; i--) {
-        const d = new Date(now); d.setDate(d.getDate() - i); d.setHours(23,59,59,999);
-        const txnsAfter = transactions.filter(t => parseDateStr(t.date) > d);
-        let balanceAtD = totalBalance;
-        txnsAfter.forEach(t => {
-            if (t.isTransfer) return;
-            if (t.isExpense) balanceAtD += t.amount;
-            else balanceAtD -= t.amount;
-        });
-        points.push(balanceAtD);
-    }
-    return points;
-  }, [totalBalance, transactions]);
 
   const recentActivity = useMemo(() => {
     const recent = transactions.slice(0, 5);
@@ -148,9 +110,8 @@ export default function DashboardPage() {
                 </button>
             </div>
             <div className="flex items-end justify-between">
-                <div className="text-[34px] font-bold tracking-[-0.01em] leading-tight tabular-nums" ref={balanceRef} />
-                <div className="w-[104px] h-11 shrink-0 ml-4">
-                    <Sparkline data={sparklineData} width={104} height={44} color="#8fc0ff" />
+                <div className="text-[34px] font-bold tracking-[-0.01em] leading-tight tabular-nums">
+                    <Money value={totalBalance} />
                 </div>
             </div>
         </section>
@@ -158,7 +119,7 @@ export default function DashboardPage() {
         <section style={anim(120)} className="bg-[#151922] border border-[#232938] rounded-[20px] py-4 px-[18px]">
             <div className="flex items-center justify-between mb-3">
                 <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-[#9aa3b2]">THIS MONTH</p>
-                {!hidden && <p className={cn("text-[13px] font-semibold", monthNet >= 0 ? "text-[#3ddc97]" : "text-[#ff6b7a]")}>Net {monthNet >= 0 ? "+" : ""}<Money value={monthNet} /></p>}
+                {!hideBalance && <p className={cn("text-[13px] font-semibold", monthNet >= 0 ? "text-[#3ddc97]" : "text-[#ff6b7a]")}>Net {monthNet >= 0 ? "+" : ""}<Money value={monthNet} /></p>}
             </div>
             <div className="h-2 w-full flex rounded-full overflow-hidden bg-[#232938] gap-[3px] mb-3">
                 <div className="h-full bg-[#3ddc97] origin-left transition-transform duration-500 delay-[200ms]" style={{ flex: Math.max(0.05, monthIncome / (monthIncome + monthExpense || 1)), transform: 'scaleX(1)' }} />
@@ -220,34 +181,5 @@ export default function DashboardPage() {
         </section>
       </div>
     </main>
-  );
-}
-
-function Sparkline({ data, width, height, color }: { data: number[]; width: number; height: number; color: string }) {
-  const min = Math.min(...data);
-  const max = Math.max(...data);
-  const range = max - min || 1;
-  const padding = 2;
-
-  const points = data.map((val, i) => {
-    const x = (i / (data.length - 1)) * (width - padding * 2) + padding;
-    const y = height - ((val - min) / range) * (height - padding * 2) - padding;
-    return `${x},${y}`;
-  }).join(" ");
-
-  return (
-    <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
-      <polyline
-        fill="none"
-        stroke={color}
-        strokeWidth="2.2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeDasharray="1000"
-        strokeDashoffset="1000"
-        points={points}
-        style={{ animation: 'draw 700ms ease-out forwards' }}
-      />
-    </svg>
   );
 }
