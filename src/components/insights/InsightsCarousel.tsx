@@ -31,10 +31,10 @@ export default function InsightsCarousel({ insights, data, isLoading, onLoadDemo
   };
 
   const getScoreLabel = (score: number) => {
-    if (score >= 80) return "Sangat Sehat";
-    if (score >= 60) return "Cukup Sehat";
-    if (score >= 40) return "Perlu Perhatian";
-    return "Kondisi Kritis";
+    if (score >= 80) return "Very Healthy";
+    if (score >= 60) return "Fairly Healthy";
+    if (score >= 40) return "Needs Attention";
+    return "Critical Condition";
   };
 
   if (isLoading) {
@@ -59,7 +59,7 @@ export default function InsightsCarousel({ insights, data, isLoading, onLoadDemo
         <div className="flex items-center gap-2">
           <div className={cn("px-2.5 py-1 rounded-xl border text-xs font-bold font-numeric flex items-center gap-1.5", getScoreColor(healthScore))}>
             <ShieldCheck className="w-3.5 h-3.5" />
-            <span>Skor Keuangan: {healthScore}/100</span>
+            <span>Financial Score: {healthScore}/100</span>
             <span className="text-[10px] font-normal opacity-80">({getScoreLabel(healthScore)})</span>
           </div>
 
@@ -122,7 +122,7 @@ export default function InsightsCarousel({ insights, data, isLoading, onLoadDemo
         </div>
       ) : (
         <div className="p-6 text-center text-white/40 text-xs rounded-2xl border border-dashed border-white/10">
-          Belum cukup data transaksi untuk menampilkan insight pintar pada filter terpilih.
+          Not enough transaction data to show smart insights for the selected filter.
         </div>
       )}
 

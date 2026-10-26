@@ -40,10 +40,10 @@ const ICON_MAP: Record<string, React.ElementType> = {
 };
 
 const SENTIMENT_LABEL: Record<string, string> = {
-  positive: "Positif",
+  positive: "Positive",
   neutral: "Info",
-  warning: "Perhatian",
-  critical: "Kritis",
+  warning: "Attention",
+  critical: "Critical",
 };
 
 type InsightCardProps = {
@@ -144,7 +144,7 @@ export default function InsightCard({ insight, isExpanded, onToggleExpand }: Ins
               aria-expanded={isExpanded}
               className="mt-2 text-[11px] font-medium text-white/50 hover:text-white flex items-center gap-1 transition-colors"
             >
-              <span>{isExpanded ? "Sembunyikan detail" : "Lihat alasan & detail"}</span>
+              <span>{isExpanded ? "Hide details" : "See why & details"}</span>
               {isExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
             </button>
           )}
