@@ -25,6 +25,9 @@ Return ONLY a JSON object with exactly these fields:
 If a field is not readable, use "" for strings and 0 for amount.
 Do NOT invent data. Return only the JSON object, no markdown fences.`;
 
+export const runtime = "nodejs";
+export const maxDuration = 30;
+
 export async function POST(req: Request) {
   const startTime = Date.now();
 
