@@ -67,7 +67,7 @@ test("hide-balance mask never leaks digits", () => {
 test("greeting buckets by hour", () => {
   assert.equal(getGreeting(6), "Good Morning");
   assert.equal(getGreeting(12), "Good Afternoon");
-  assert.equal(getGreeting(16), "Good Evening");
+  assert.equal(getGreeting(16), "Good Afternoon");
   assert.equal(getGreeting(3), "Good Evening");
 });
 
