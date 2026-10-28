@@ -10,9 +10,10 @@ import {
 import { cn } from "@/lib/utils";
 import { useFinanceStore, type Transaction } from "@/store/useFinanceStore";
 import { getSystemDate, getSystemTime } from "@/lib/date";
-import { Overlay, Portal, GrabHandle, Z } from "@/components/overlay";
+import { Overlay, GrabHandle, Z } from "@/components/overlay";
 import Money from "@/components/Money";
 import Toast from "@/components/Toast";
+import SuccessOverlay from "@/components/SuccessOverlay";
 import { overshootMessage, budgetAlertKeys, currentPeriod } from "@/lib/budget";
 
 const CATS = [
@@ -650,71 +651,16 @@ export default function TransaksiPage() {
 
       {toast && <Toast message={toast} />}
 
-      {/* Success — portaled */}
-      <Portal>
-        {saved && (
-          <motion.div
-            className="fixed inset-0 isolate flex items-center justify-center bg-black/80"
-            style={{ zIndex: Z.modal }}
-            role="status"
-            aria-label="Transaction saved"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.2 }}
-          >
-            <motion.div
-              className="flex flex-col items-center gap-4"
-              initial={{ scale: 0.8, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.8, opacity: 0 }}
-              transition={{ type: "spring", stiffness: 200, damping: 20, duration: 0.5 }}
-            >
-              <motion.div
-                className="w-24 h-24 rounded-full bg-[#007AFF]/12 border border-[#007AFF]/30 flex items-center justify-center"
-                animate={{
-                  scale: [1, 1.15, 1],
-                  boxShadow: [
-                    "0 0 0 0 rgba(0, 122, 255, 0.1)",
-                    "0 0 0 20px rgba(0, 122, 255, 0)",
-                  ],
-                }}
-                transition={{ duration: 1.2, times: [0, 0.5, 1] }}
-              >
-                <motion.div
-                  animate={{ scale: [0.8, 1.1, 1], rotate: [0, 10, 0] }}
-                  transition={{ duration: 0.6, times: [0, 0.5, 1] }}
-                >
-                  <Check className="w-12 h-12 text-[#007AFF]" strokeWidth={2.5} />
-                </motion.div>
-              </motion.div>
-              <motion.div
-                className="text-center"
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.15, duration: 0.4 }}
-              >
-                <motion.h3
-                  className="text-2xl font-bold text-foreground tracking-tighter mb-1"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ delay: 0.25, duration: 0.3 }}
-                >
-                  Success!
-                </motion.h3>
-                <motion.p
-                  className="text-sm text-muted-foreground"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ delay: 0.35, duration: 0.3 }}
-                >
-                  {isExpense ? "Expense" : "Income"} transaction saved
-                </motion.p>
-              </motion.div>
-            </motion.div>
-          </motion.div>
-        )}
-      </Portal>
+      {/* Success — shared overlay (same staging, timing and destination as before) */}
+      {saved && (
+        <SuccessOverlay
+          title="Success!"
+          caption={`${isExpense ? "Expense" : "Income"} transaction saved`}
+          ariaLabel="Transaction saved"
+          backdropClassName="bg-black/80"
+          z={Z.modal}
+        />
+      )}
     </motion.main>
   );
 }

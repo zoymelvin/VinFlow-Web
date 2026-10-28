@@ -13,6 +13,6 @@
     "jsx": "react-jsx",
     "types": ["node"]
   },
-  "include": ["src/lib/date.ts", "src/lib/settings.ts", "src/lib/transfer.ts", "src/lib/insights/**/*.ts", "src/lib/history.ts", "src/lib/receipt.ts", "src/lib/budget.ts", "src/store/**/*.ts", "tests/**/*.ts"],
+  "include": ["src/lib/date.ts", "src/lib/settings.ts", "src/lib/transfer.ts", "src/lib/transferFlow.ts", "src/lib/insights/**/*.ts", "src/lib/history.ts", "src/lib/receipt.ts", "src/lib/budget.ts", "src/store/**/*.ts", "tests/**/*.ts"],
   "exclude": ["node_modules", ".next", ".tmp-tests"]
 }

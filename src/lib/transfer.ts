@@ -114,32 +114,3 @@ export function resolveInitialSelection(
   }
   return { from: fromId, to: toId };
 }
-
-/* ── Post-transfer handoff (module-level, like Home's entrance flag) ──
- * The Transfer page records what just happened; the Wallets page consumes
- * it on next mount to run the balance count-up and show the toast. Plain
- * module state: it survives client-side navigation, needs no store slot,
- * and is consumed once.
- */
-export interface PendingTransferResult {
-  fromPocketId: string;
-  toPocketId: string;
-  fromBefore: number;
-  toBefore: number;
-  amount: number;
-  fromName: string;
-  toName: string;
-  toast: string;
-}
-
-let pending: PendingTransferResult | null = null;
-
-export function setPendingTransferResult(result: PendingTransferResult): void {
-  pending = result;
-}
-
-export function takePendingTransferResult(): PendingTransferResult | null {
-  const result = pending;
-  pending = null;
-  return result;
-}

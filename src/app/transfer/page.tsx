@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useReducedMotion } from "framer-motion";
 import Link from "next/link";
 import {
   ArrowLeft, ArrowLeftRight, ArrowUpDown, Check, ChevronDown, Wallet, X,
@@ -9,7 +10,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useFinanceStore, type Pocket } from "@/store/useFinanceStore";
 import Money, { useMoneyDisplay } from "@/components/Money";
-import { Overlay, GrabHandle, Z } from "@/components/overlay";
+import { Overlay, GrabHandle, Z, useBackEntry } from "@/components/overlay";
 import { POCKET_ICONS } from "@/components/CategoryIcon";
 import { getSystemDate } from "@/lib/date";
 import { formatIDR } from "@/lib/settings";
@@ -25,6 +26,13 @@ import {
   transferButtonLabel,
   validateAmountForBalance,
 } from "@/lib/transfer";
+import {
+  nextTransferStatus,
+  canSubmit,
+  type TransferFlowStatus,
+  type TransferFlowEvent,
+} from "@/lib/transferFlow";
+import SuccessOverlay from "@/components/SuccessOverlay";
 
 /**
  * Text-digits input rendered with id-ID thousand grouping. Keeps a stable
@@ -73,6 +81,7 @@ function useFormattedDigitsInput() {
 
 export default function TransferPage() {
   const router = useRouter();
+  const reduceMotion = useReducedMotion();
   const pockets = useFinanceStore((s) => s.pockets);
   const addTransfer = useFinanceStore((s) => s.addTransfer);
   const { text: moneyText } = useMoneyDisplay();
@@ -84,22 +93,35 @@ export default function TransferPage() {
   const [toId, setToId] = useState<string | null>(null);
   const [pickerSide, setPickerSide] = useState<"from" | "to" | null>(null);
   const [feeOpen, setFeeOpen] = useState(false);
-  const [msg, setMsg] = useState("");
-  const [sending, setSending] = useState(false);
-  const [succeeded, setSucceeded] = useState(false);
+  const [errorMsg, setErrorMsg] = useState("");
   const [keyboardLift, setKeyboardLift] = useState(0);
 
   const amountInput = useFormattedDigitsInput();
   const feeInput = useFormattedDigitsInput();
   const { setDigits: setAmountDigits } = amountInput;
   const keyRef = useRef<string | null>(null);
-  const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const leaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const fallbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const navigatedRef = useRef(false);
   const mountedRef = useRef(false);
+  const [status, dispatch] = useReducer<
+    React.Reducer<TransferFlowStatus, { type: TransferFlowEvent }>
+  >(
+    (s, a) => nextTransferStatus(s, a.type),
+    "idle"
+  );
+  const [result, setResult] = useState<{
+    amount: number;
+    fromName: string;
+    toName: string;
+    fee: number;
+  } | null>(null);
 
   useEffect(() => {
     setHasMounted(true);
     setRouteParams(parseTransferRouteParams(window.location.search));
-  }, []);
+    router.prefetch("/");
+  }, [router]);
 
   // Initial From/To: route params when they point at real wallets, else the
   // largest-balance wallet. From == To is auto-repaired to a different To.
@@ -127,9 +149,9 @@ export default function TransferPage() {
     }
   }, [pockets, selectionInit, fromId, toId]);
 
-  // Store errors are transient: clear the line as soon as the user edits.
+  // Clear store errors as soon as the user edits the form again.
   useEffect(() => {
-    setMsg("");
+    setErrorMsg("");
   }, [amountInput.digits, feeInput.digits, fromId, toId]);
 
   // Keep the pinned send button above the on-screen keyboard (iOS Safari
@@ -152,15 +174,27 @@ export default function TransferPage() {
     };
   }, [hasMounted]);
 
-  // Cancel pending navigation if the user leaves mid-send.
+  // Cancel pending timers if the component unmounts mid-flow.
   useEffect(() => {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
-      timersRef.current.forEach((t) => clearTimeout(t));
-      timersRef.current = [];
+      if (leaveTimerRef.current) {
+        clearTimeout(leaveTimerRef.current);
+        leaveTimerRef.current = null;
+      }
+      if (fallbackTimerRef.current) {
+        clearTimeout(fallbackTimerRef.current);
+        fallbackTimerRef.current = null;
+      }
     };
   }, []);
+
+  // Hardware/software back while overlay is showing -> leave to Home.
+  useBackEntry(
+    status === "success" || status === "leaving",
+    () => leave()
+  );
 
   /* ── Derived state ── */
   const fromPocket = pockets.find((p) => p.id === fromId) ?? null;
@@ -178,14 +212,14 @@ export default function TransferPage() {
     amountInt > 0 && !fundsOk
       ? `Not enough balance in ${fromPocket?.name ?? "wallet"}. Available: ${formatIDR(Math.max(0, available))}.`
       : "";
-  const displayedMsg = msg || insufficientMsg;
+  const displayedMsg = errorMsg || insufficientMsg;
   const { fromAfter, toAfter } = computeBalancesAfter({
     fromBalance,
     toBalance,
     amount: amountInt,
     adminFee: feeInt,
   });
-  const canSend = !sending && !succeeded && !!fromPocket && !!toPocket && amountInt > 0 && fundsOk;
+  const canSend = canSubmit(status) && !!fromPocket && !!toPocket && amountInt > 0 && fundsOk;
 
   /* ── Handlers ── */
   const handleSwap = () => {
@@ -212,10 +246,24 @@ export default function TransferPage() {
     setPickerSide(null);
   };
 
+  const leave = useCallback(() => {
+    if (navigatedRef.current) return;
+    navigatedRef.current = true;
+    dispatch({ type: "ANIMATION_DONE" });
+    router.replace("/");
+    // Fallback: if still on /transfer after 2s, force-replace.
+    const t = setTimeout(() => {
+      if (mountedRef.current && window.location.pathname.startsWith("/transfer")) {
+        window.location.replace("/");
+      }
+    }, 2000);
+    fallbackTimerRef.current = t;
+  }, [router]);
+
   const handleSend = () => {
     if (!canSend || !fromPocket || !toPocket) return;
-    setSending(true);
-    setMsg("");
+    dispatch({ type: "SUBMIT" });
+    setErrorMsg("");
     // One idempotency key per send attempt — reused on repeated taps,
     // cleared only after success, so a double tap can never duplicate.
     if (!keyRef.current) {
@@ -231,15 +279,25 @@ export default function TransferPage() {
     });
     if (res.ok) {
       keyRef.current = null;
-      setSucceeded(true);
+      // Snapshot data for the overlay (does not depend on store after this point).
+      setResult({
+        amount: amountInt,
+        fromName: fromPocket.name,
+        toName: toPocket.name,
+        fee: feeInt,
+      });
+      dispatch({ type: "RESOLVE_OK" });
+      // Primary timer: matches SuccessOverlay internal timing (1500ms / 900ms reduced).
+      // The overlay also calls onDone when its animation ends; this timer is a safety net.
+      const delay = reduceMotion ? 900 : 1500;
       const t = setTimeout(() => {
-        if (mountedRef.current) router.back();
-      }, 240);
-      timersRef.current.push(t);
+        leave();
+      }, delay);
+      leaveTimerRef.current = t;
     } else {
       // The store is the authority; keep every input untouched, re-arm.
-      setSending(false);
-      setMsg(res.error);
+      dispatch({ type: "RESOLVE_ERROR" });
+      setErrorMsg(res.error);
     }
   };
 
@@ -546,6 +604,21 @@ export default function TransferPage() {
         </div>
       </Overlay>
 
+      {/* Success overlay — shared component with Add Transaction */}
+      {(status === "success" || status === "leaving") && result && (
+        <SuccessOverlay
+          tone="transfer"
+          title="Transfer successful"
+          amount={<Money value={result.amount} />}
+          caption={`${result.fromName} → ${result.toName}`}
+          extra={result.fee > 0 ? `Admin fee ${formatIDR(result.fee)}` : undefined}
+          ariaLabel="Transfer successful"
+          reducedMotion={!!reduceMotion}
+          skipLabel="Skip to home"
+          onDone={leave}
+        />
+      )}
+
       {/* Send button — pinned to the viewport bottom, lifted above the
           on-screen keyboard with a transform only (no layout shift). */}
       <div
@@ -570,15 +643,7 @@ export default function TransferPage() {
           )}
         >
           <span className="inline-flex items-center gap-2">
-            {succeeded ? (
-              <>
-                <Check className="w-5 h-5" strokeWidth={3} aria-hidden="true" /> Moved
-              </>
-            ) : sending ? (
-              "Moving…"
-            ) : (
-              transferButtonLabel(amountInput.digits)
-            )}
+            {status === "submitting" ? "Moving…" : transferButtonLabel(amountInput.digits)}
           </span>
         </button>
       </div>
