@@ -49,7 +49,8 @@ export function filterTransactions(
     if (filters.type === "income" && (t.isExpense || t.isTransfer)) return false;
     if (filters.type === "expense" && (!t.isExpense || t.isTransfer)) return false;
     if (filters.type === "transfer" && !t.isTransfer) return false;
-    if (filters.pocketId && t.pocketId !== filters.pocketId) return false;
+    // A wallet filter keeps transfers where that wallet is source OR destination.
+    if (filters.pocketId && t.pocketId !== filters.pocketId && t.transferToPocketId !== filters.pocketId) return false;
     if (filters.onlyStarred && !t.starred) return false;
     if (start && end) {
       const d = parseDateStr(t.date);
@@ -159,7 +160,8 @@ export function groupByDay(
       keys.push(key);
     }
     g.items.push(t);
-    g.total += t.isExpense ? -t.amount : t.amount;
+    // Transfers move money between wallets — never part of a day's income/expense.
+    if (!t.isTransfer) g.total += t.isExpense ? -t.amount : t.amount;
     g.count += 1;
   });
   const groups = keys.map((k) => map[k]);
@@ -212,11 +214,13 @@ export function toCSV(transactions: Transaction[], pocketName: (id: string) => s
       [
         t.date,
         t.time,
-        t.isExpense ? "Expense" : "Income",
+        t.isTransfer ? "Transfer" : t.isExpense ? "Expense" : "Income",
         t.category,
         t.name,
         t.note ?? "",
-        pocketName(t.pocketId),
+        t.isTransfer && t.transferToPocketId
+          ? `${pocketName(t.pocketId)} → ${pocketName(t.transferToPocketId)}`
+          : pocketName(t.pocketId),
         Math.round(t.amount),
       ]
         .map(csvCell)

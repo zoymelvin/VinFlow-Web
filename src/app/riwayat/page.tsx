@@ -6,6 +6,7 @@ import { motion } from "framer-motion";
 import {
   ArrowLeft, SlidersHorizontal, Star, X,
   Check, Trash2, Download, ChevronDown, NotebookPen,
+  ArrowLeftRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useFinanceStore, type Pocket, type Transaction } from "@/store/useFinanceStore";
@@ -47,7 +48,9 @@ export default function RiwayatPage() {
   const addTransaction = useFinanceStore((s) => s.addTransaction);
   const updatePocketBalance = useFinanceStore((s) => s.updatePocketBalance);
   const deleteTransaction = useFinanceStore((s) => s.deleteTransaction);
+  const deleteTransfer = useFinanceStore((s) => s.deleteTransfer);
   const toggleStar = useFinanceStore((s) => s.toggleStar);
+  const goals = useFinanceStore((s) => s.goals);
 
   const { text: moneyText } = useMoneyDisplay();
   const [hasMounted, setHasMounted] = useState(false);
@@ -206,7 +209,12 @@ export default function RiwayatPage() {
 
   const doDelete = () => {
     if (!confirmDelete) return;
-    confirmDelete.forEach((id) => deleteTransaction(id));
+    confirmDelete.forEach((id) => {
+      const t = transactions.find((x) => x.id === id);
+      // Transfers delete atomically (balances + admin fee + goal link).
+      if (t?.isTransfer) deleteTransfer(id);
+      else deleteTransaction(id);
+    });
     setConfirmDelete(null);
     exitSelectMode();
     setDetailId(null);
@@ -336,7 +344,7 @@ export default function RiwayatPage() {
         <section aria-label="Filters" className="relative rounded-2xl bg-white/5 border border-white/10 p-4 mb-3 space-y-5">
           <div>
             <p className="text-[11px] font-semibold text-white/40 uppercase tracking-widest mb-2">Type</p>
-            <div className="grid grid-cols-3 gap-1.5 p-1 rounded-xl bg-black/30 border border-white/5" role="tablist" aria-label="Transaction type filter">
+            <div className="grid grid-cols-4 gap-1.5 p-1 rounded-xl bg-black/30 border border-white/5" role="tablist" aria-label="Transaction type filter">
               {(["all", "expense", "income", "transfer"] as TypeFilter[]).map((v) => (
                 <button
                   key={v}
@@ -355,7 +363,7 @@ export default function RiwayatPage() {
                       : "text-white/50 border border-transparent"
                   )}
                 >
-                  {v === "all" ? "All" : v === "expense" ? "Expense" : "Income"}
+                  {v === "all" ? "All" : v === "expense" ? "Expense" : v === "income" ? "Income" : "Transfer"}
                 </button>
               ))}
             </div>
@@ -512,13 +520,15 @@ export default function RiwayatPage() {
                 {g.items.map((t) => {
                   const checked = selected.includes(t.id);
                   const press = bindPress(t.id);
+                  const fromName = pockets.find((p) => p.id === t.pocketId)?.name ?? "Deleted wallet";
+                  const toName = pockets.find((p) => p.id === t.transferToPocketId)?.name ?? "Deleted wallet";
                   return (
                     <li key={t.id}>
                       <button
                         type="button"
                         {...press}
                         onClick={() => (selectMode ? toggleSelect(t.id) : setDetailId(t.id))}
-                        aria-label={`${t.isExpense ? "Expense" : "Income"} ${t.category} ${moneyText(t.amount)}`}
+                        aria-label={`${t.isTransfer ? "Transfer" : t.isExpense ? "Expense" : "Income"} ${t.isTransfer ? `${fromName} to ${toName}` : t.category} ${moneyText(t.amount)}`}
                         aria-pressed={selectMode ? checked : undefined}
                         className="w-full flex items-center gap-3 p-3.5 text-left transition min-h-[64px] select-none touch-pan-y outline-none focus-visible:ring-2 focus-visible:ring-blue-500/60 focus-visible:ring-inset active:bg-white/5"
                         style={{ WebkitTapHighlightColor: "transparent", WebkitTouchCallout: "none" }}
@@ -534,7 +544,13 @@ export default function RiwayatPage() {
                             {checked && <Check className="w-3 h-3 text-white" strokeWidth={3} />}
                           </span>
                         )}
-                        <CategoryIcon category={t.category} />
+                        {t.isTransfer ? (
+                          <span aria-hidden="true" className="w-10 h-10 rounded-2xl bg-[#6ea4ff]/10 border border-[#6ea4ff]/25 flex items-center justify-center shrink-0">
+                            <ArrowLeftRight className="w-5 h-5 text-[#6ea4ff]" strokeWidth={1.8} />
+                          </span>
+                        ) : (
+                          <CategoryIcon category={t.category} />
+                        )}
                         <span className="flex-1 min-w-0">
                           <span className="flex items-center gap-1.5">
                             <span className="text-sm font-semibold truncate">{displayName(t)}</span>
@@ -543,21 +559,21 @@ export default function RiwayatPage() {
                             )}
                           </span>
                              <span className="text-xs text-white/40 truncate block">
-                               {t.category} · {t.time}
-                               {t.note ? " · has note" : ""}
-                               {t.image ? " · has photo" : ""}
-                               {t.goalAllocation && t.goalAllocation.length > 0 && (
-                                 <span className="ml-1 inline-flex h-2 w-2 items-center justify-center rounded-full bg-green-400" />
-                               )}
-                             </span>
+                                {t.isTransfer ? `${fromName} → ${toName} · ${t.time}` : `${t.category} · ${t.time}`}
+                                {t.note ? " · has note" : ""}
+                                {t.image ? " · has photo" : ""}
+                                {t.goalAllocation && t.goalAllocation.length > 0 && (
+                                  <span className="ml-1 inline-flex h-2 w-2 items-center justify-center rounded-full bg-green-400" />
+                                )}
+                              </span>
                         </span>
                         <span
                           className={cn(
                             "text-sm font-bold font-numeric shrink-0 max-w-[45%] truncate",
-                            t.isExpense ? "text-white" : "text-green-500"
+                            t.isTransfer ? "text-white/70" : t.isExpense ? "text-white" : "text-green-500"
                           )}
                         >
-                          {t.isExpense ? "−" : "+"}<Money value={t.amount} />
+                          <Money value={t.amount} prefix={t.isTransfer ? "" : t.isExpense ? "−" : "+"} />
                         </span>
                       </button>
                     </li>
@@ -645,6 +661,9 @@ export default function RiwayatPage() {
       <TransactionDetailSheet
         txn={detailTxn}
         pocketName={detailTxn ? pocketNameOf(pockets, detailTxn.pocketId) : ""}
+        pocketNameOf={(id) => pocketNameOf(pockets, id)}
+        feeAmountOf={(id) => transactions.find((x) => x.id === id)?.amount}
+        goalNameOf={(id) => goals.find((g) => g.id === id)?.name}
         onClose={() => setDetailId(null)}
         onDelete={(t) => confirmAndDelete([t.id])}
         onDuplicate={handleDuplicate}
@@ -653,7 +672,12 @@ export default function RiwayatPage() {
 
       {/* Delete confirmation — portaled so page stacking can't cover it */}
       <Portal>
-        {confirmDelete && (
+        {confirmDelete && (() => {
+          const hasTransfer = confirmDelete.some((id) => {
+            const t = transactions.find((x) => x.id === id);
+            return !!t?.isTransfer;
+          });
+          return (
           <div
             className="fixed inset-0 isolate flex items-center justify-center p-6"
             style={{ zIndex: Z.confirm }}
@@ -664,12 +688,19 @@ export default function RiwayatPage() {
             <div className="absolute inset-0 bg-black/80" onClick={() => setConfirmDelete(null)} />
             <div className="relative w-full max-w-xs rounded-3xl bg-secondary border border-white/10 p-5 shadow-2xl">
               <h3 className="text-sm font-bold text-white mb-1.5">
-                Delete {confirmDelete.length === 1 ? "transaction" : `${confirmDelete.length} transactions`}?
+                Delete {confirmDelete.length === 1 ? (hasTransfer ? "transfer" : "transaction") : `${confirmDelete.length} transactions`}?
               </h3>
               <p className="text-xs text-white/50 leading-relaxed mb-4">
                 {confirmDelete.length === 1
-                  ? "This transaction will be removed and the wallet balance restored. This cannot be undone."
-                  : `${confirmDelete.length} transactions will be removed and wallet balances restored. This cannot be undone.`}
+                  ? hasTransfer
+                    ? "This transfer will be removed and both wallet balances restored, including any admin fee. This cannot be undone."
+                    : "This transaction will be removed and the wallet balance restored. This cannot be undone."
+                  : `${confirmDelete.length} transactions will be removed and wallet balances restored.`}
+                {confirmDelete.length > 1 && hasTransfer
+                  ? " Transfers restore both wallet balances and their admin fees are removed. This cannot be undone."
+                  : confirmDelete.length === 1
+                    ? ""
+                    : " This cannot be undone."}
               </p>
               <div className="flex gap-2">
                 <button
@@ -689,7 +720,8 @@ export default function RiwayatPage() {
               </div>
             </div>
           </div>
-        )}
+          );
+        })()}
       </Portal>
 
       {/* Toast */}

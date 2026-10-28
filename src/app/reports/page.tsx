@@ -54,7 +54,8 @@ export default function LaporanPage() {
 
   const filteredTxns = useMemo(() => {
     return transactions.filter((t) => {
-      if (selectedPocket && t.pocketId !== selectedPocket) return false;
+      // Wallet filter keeps transfers where the wallet is source OR destination.
+      if (selectedPocket && t.pocketId !== selectedPocket && t.transferToPocketId !== selectedPocket) return false;
       if (dateRange) {
         const d = new Date(t.date);
         const start = new Date(dateRange.start);
@@ -88,7 +89,6 @@ export default function LaporanPage() {
     if (filteredTxns.length === 0) return [];
     const daily: Record<string, { label: string; ts: number; delta: number }> = {};
     filteredTxns.forEach((t) => {
-      if (t.isTransfer) return;
       const d = new Date(t.date);
       const dayStart = new Date(d.getFullYear(), d.getMonth(), d.getDate());
       const ts = dayStart.getTime();
@@ -100,6 +100,13 @@ export default function LaporanPage() {
           delta: 0,
         };
       }
+      if (t.isTransfer) {
+        // Material only in a single-wallet view: money out of / into that wallet.
+        if (!selectedPocket) return;
+        if (t.pocketId === selectedPocket) daily[key].delta -= t.amount;
+        else if (t.transferToPocketId === selectedPocket) daily[key].delta += t.amount;
+        return;
+      }
       daily[key].delta += t.isExpense ? -t.amount : t.amount;
     });
     let cum = 0;
@@ -109,7 +116,7 @@ export default function LaporanPage() {
         cum += delta;
         return { date: label, amount: cum };
       });
-  }, [filteredTxns]);
+  }, [filteredTxns, selectedPocket]);
 
   const barData = useMemo(() => {
     if (filteredTxns.length === 0) return [];

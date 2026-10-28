@@ -17,6 +17,12 @@ interface Props {
   onDelete: (t: Transaction) => void;
   onDuplicate: (t: Transaction) => void;
   onToggleStar: (t: Transaction) => void;
+  /** Resolves any wallet id to its name — used for transfer From/To rows. */
+  pocketNameOf?: (id: string) => string;
+  /** Returns the admin fee amount for a fee txn id, undefined when gone. */
+  feeAmountOf?: (feeTxnId: string) => number | undefined;
+  /** Resolves a goal id to its name for the goal-allocation badge. */
+  goalNameOf?: (goalId: string) => string | undefined;
 }
 
 /**
@@ -26,6 +32,7 @@ interface Props {
  */
 export default function TransactionDetailSheet({
   txn, pocketName, onClose, onDelete, onDuplicate, onToggleStar,
+  pocketNameOf, feeAmountOf, goalNameOf,
 }: Props) {
   const router = useRouter();
   const [imgOpen, setImgOpen] = useState(false);
@@ -46,6 +53,11 @@ export default function TransactionDetailSheet({
   useLockBody(imgOpen);
 
   if (!txn) return null;
+
+  const isTransfer = !!txn.isTransfer;
+  const transferFee = isTransfer && txn.adminFeeTransactionId && feeAmountOf
+    ? feeAmountOf(txn.adminFeeTransactionId)
+    : undefined;
 
   const copyId = async () => {
     try {
@@ -91,30 +103,57 @@ export default function TransactionDetailSheet({
           <div className="flex flex-col items-center">
             <CategoryIcon category={txn.category} />
             <p className="text-[11px] font-semibold uppercase tracking-widest text-white/40 mt-2">
-              {txn.isExpense ? "Expense" : "Income"}
+              {txn.isTransfer ? "Transfer" : txn.isExpense ? "Expense" : "Income"}
             </p>
             <p
               className={cn(
                 "font-bold tracking-tight font-numeric break-all leading-tight text-center",
                 "text-[2rem]",
-                txn.isExpense ? "text-white" : "text-green-500"
+                txn.isExpense ? "text-white" : txn.isTransfer ? "text-white" : "text-green-500"
               )}
             >
-              <Money value={txn.amount} prefix={txn.isExpense ? "−" : "+"} />
+              <Money value={txn.amount} prefix={txn.isTransfer ? "" : txn.isExpense ? "−" : "+"} />
             </p>
             <p className="text-xs text-white/40 mt-1">{txn.date} · {txn.time}</p>
           </div>
 
           {/* Rows */}
           <dl className="mt-4 rounded-2xl bg-white/5 border border-white/10 divide-y divide-white/5 overflow-hidden">
-            <div className="flex items-center justify-between gap-3 p-3.5">
-              <dt className="text-[10px] uppercase tracking-widest text-white/40 shrink-0">Category</dt>
-              <dd className="text-sm font-semibold truncate text-right">{txn.category}</dd>
-            </div>
-            <div className="flex items-center justify-between gap-3 p-3.5">
-              <dt className="text-[10px] uppercase tracking-widest text-white/40 shrink-0">Wallet</dt>
-              <dd className="text-sm font-semibold truncate text-right">{pocketName}</dd>
-            </div>
+            {isTransfer ? (
+              <>
+                <div className="flex items-center justify-between gap-3 p-3.5">
+                  <dt className="text-[10px] uppercase tracking-widest text-white/40 shrink-0">From</dt>
+                  <dd className="text-sm font-semibold truncate text-right">
+                    {pocketNameOf ? pocketNameOf(txn.pocketId) : pocketName}
+                  </dd>
+                </div>
+                <div className="flex items-center justify-between gap-3 p-3.5">
+                  <dt className="text-[10px] uppercase tracking-widest text-white/40 shrink-0">To</dt>
+                  <dd className="text-sm font-semibold truncate text-right">
+                    {txn.transferToPocketId && pocketNameOf ? pocketNameOf(txn.transferToPocketId) : "Deleted wallet"}
+                  </dd>
+                </div>
+                {transferFee !== undefined && (
+                  <div className="flex items-center justify-between gap-3 p-3.5">
+                    <dt className="text-[10px] uppercase tracking-widest text-white/40 shrink-0">Admin fee</dt>
+                    <dd className="text-sm font-semibold truncate text-right font-numeric">
+                      <Money value={transferFee} />
+                    </dd>
+                  </div>
+                )}
+              </>
+            ) : (
+              <>
+                <div className="flex items-center justify-between gap-3 p-3.5">
+                  <dt className="text-[10px] uppercase tracking-widest text-white/40 shrink-0">Category</dt>
+                  <dd className="text-sm font-semibold truncate text-right">{txn.category}</dd>
+                </div>
+                <div className="flex items-center justify-between gap-3 p-3.5">
+                  <dt className="text-[10px] uppercase tracking-widest text-white/40 shrink-0">Wallet</dt>
+                  <dd className="text-sm font-semibold truncate text-right">{pocketName}</dd>
+                </div>
+              </>
+            )}
             <div className="flex items-center justify-between gap-3 p-3.5">
               <dt className="text-[10px] uppercase tracking-widest text-white/40 shrink-0">Name</dt>
               <dd className="text-sm font-semibold truncate text-right">{displayName(txn)}</dd>
@@ -138,10 +177,10 @@ export default function TransactionDetailSheet({
           {/* Goal allocation badge — only when present */}
           {txn.goalAllocation && txn.goalAllocation.length > 0 ? (
             <div className="mt-3 rounded-2xl bg-green-500/10 border border-green-500/30 p-3.5">
-              <p className="text-[10px] uppercase tracking-widest text-green-400 mb-1">Allocated to goal</p>
+              <p className="text-[10px] uppercase tracking-widest text-green-400 mb-1">Linked goal</p>
               {txn.goalAllocation.map((a, i) => (
                 <div key={i} className="text-sm text-white/90">
-                  {a.goalId} — <Money value={a.amount} prefix="Rp " />
+                  {goalNameOf?.(a.goalId) ?? a.goalId} — <Money value={a.amount} prefix="Rp " />
                 </div>
               ))}
             </div>
@@ -193,30 +232,42 @@ export default function TransactionDetailSheet({
           ) : null}
         </div>
 
-        {/* Actions — pinned, always visible */}
-        <div className="grid grid-cols-3 gap-2 px-5 pt-2 pb-5 shrink-0 border-t border-white/5 bg-card">
-          <button
-            type="button"
-            onClick={() => router.push(`/transaksi?edit=${encodeURIComponent(txn.id)}`)}
-            className="flex items-center justify-center gap-1.5 py-3 rounded-xl bg-white/5 border border-white/10 text-white/80 text-xs font-semibold active:scale-95 transition min-h-[48px]"
-          >
-            <Pencil className="w-4 h-4" /> Edit
-          </button>
-          <button
-            type="button"
-            onClick={() => onDuplicate(txn)}
-            className="flex items-center justify-center gap-1.5 py-3 rounded-xl bg-white/5 border border-white/10 text-white/80 text-xs font-semibold active:scale-95 transition min-h-[48px]"
-          >
-            <Copy className="w-4 h-4" /> Duplicate
-          </button>
-          <button
-            type="button"
-            onClick={() => onDelete(txn)}
-            className="flex items-center justify-center gap-1.5 py-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-300 text-xs font-semibold active:scale-95 transition min-h-[48px]"
-          >
-            <Trash2 className="w-4 h-4" /> Delete
-          </button>
-        </div>
+        {/* Actions — pinned, always visible. No Edit/Duplicate for transfers. */}
+        {isTransfer ? (
+          <div className="px-5 pt-2 pb-5 shrink-0 border-t border-white/5 bg-card">
+            <button
+              type="button"
+              onClick={() => onDelete(txn)}
+              className="w-full flex items-center justify-center gap-1.5 py-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-300 text-xs font-semibold active:scale-95 transition min-h-[48px]"
+            >
+              <Trash2 className="w-4 h-4" /> Delete
+            </button>
+          </div>
+        ) : (
+          <div className="grid grid-cols-3 gap-2 px-5 pt-2 pb-5 shrink-0 border-t border-white/5 bg-card">
+            <button
+              type="button"
+              onClick={() => router.push(`/transaksi?edit=${encodeURIComponent(txn.id)}`)}
+              className="flex items-center justify-center gap-1.5 py-3 rounded-xl bg-white/5 border border-white/10 text-white/80 text-xs font-semibold active:scale-95 transition min-h-[48px]"
+            >
+              <Pencil className="w-4 h-4" /> Edit
+            </button>
+            <button
+              type="button"
+              onClick={() => onDuplicate(txn)}
+              className="flex items-center justify-center gap-1.5 py-3 rounded-xl bg-white/5 border border-white/10 text-white/80 text-xs font-semibold active:scale-95 transition min-h-[48px]"
+            >
+              <Copy className="w-4 h-4" /> Duplicate
+            </button>
+            <button
+              type="button"
+              onClick={() => onDelete(txn)}
+              className="flex items-center justify-center gap-1.5 py-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-300 text-xs font-semibold active:scale-95 transition min-h-[48px]"
+            >
+              <Trash2 className="w-4 h-4" /> Delete
+            </button>
+          </div>
+        )}
       </Overlay>
 
       {/* Image lightbox — portaled */}

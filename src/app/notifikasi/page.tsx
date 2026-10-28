@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { ArrowLeft, AlertTriangle } from "lucide-react";
+import { ArrowLeft, AlertTriangle, ArrowLeftRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useFinanceStore } from "@/store/useFinanceStore";
 import { parseBudgetAlertKey } from "@/lib/budget";
@@ -95,6 +95,7 @@ export default function NotifikasiPage() {
           transactions.map((t) => {
             const isViewed = !!t.viewed;
             const pocket = pockets.find((p) => p.id === t.pocketId);
+            const toPocket = pockets.find((p) => p.id === t.transferToPocketId);
             return (
               <button
                 key={t.id}
@@ -108,15 +109,23 @@ export default function NotifikasiPage() {
                 )}
               >
                 <div className="flex-1 min-w-0 flex items-start gap-3">
-                  <CategoryIcon category={t.category} />
+                  {t.isTransfer ? (
+                    <span aria-hidden="true" className="w-10 h-10 rounded-xl bg-[#6ea4ff]/10 border border-[#6ea4ff]/25 flex items-center justify-center shrink-0">
+                      <ArrowLeftRight className="w-5 h-5 text-[#6ea4ff]" strokeWidth={1.8} />
+                    </span>
+                  ) : (
+                    <CategoryIcon category={t.category} />
+                  )}
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold truncate">{t.name}</p>
-                    <p className="text-xs text-white/40">{pocket?.name} • {t.date}</p>
+                    <p className="text-xs text-white/40">
+                      {t.isTransfer ? `${pocket?.name ?? "Deleted wallet"} → ${toPocket?.name ?? "Deleted wallet"}` : `${pocket?.name} • ${t.date}`}
+                    </p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
-                  <p className={cn("text-sm font-bold", t.isExpense ? "text-white" : "text-green-500")}>
-                    <Money value={t.amount} prefix={t.isExpense ? "-" : "+"} />
+                  <p className={cn("text-sm font-bold", t.isTransfer ? "text-white/70" : t.isExpense ? "text-white" : "text-green-500")}>
+                    <Money value={t.amount} prefix={t.isTransfer ? "" : t.isExpense ? "-" : "+"} />
                   </p>
                   {!isViewed && (
                     <span className="w-2 h-2 bg-blue-500 rounded-full" />
