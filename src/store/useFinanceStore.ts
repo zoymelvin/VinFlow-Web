@@ -17,6 +17,12 @@ export type Transaction = {
   isExpense: boolean;
   isTransfer?: boolean;
   transferToPocketId?: string;
+  /** Idempotency key: unique per send attempt, stored to block double submits. */
+  transferKey?: string;
+  /** Expense txn id of the admin fee charged for this transfer (fee > 0 only). */
+  adminFeeTransactionId?: string;
+  /** Set on an "Admin fee" expense: id of the transfer it belongs to. */
+  transferFeeOf?: string;
   pocketId: string;
   time: string;
   date: string;
@@ -73,6 +79,21 @@ export type Goal = {
   createdAt: string;
 };
 
+export type TransferInput = {
+  fromPocketId: string;
+  toPocketId: string;
+  amount: number;
+  adminFee?: number;
+  note?: string;
+  date?: string; // YYYY-MM-DD, defaults to today
+  goalId?: string;
+  key: string; // idempotency key, unique per send attempt
+};
+
+export type TransferResult =
+  | { ok: true; txnId: string; feeTxnId?: string; duplicate: boolean }
+  | { ok: false; error: string };
+
 import { getSystemDate, getSystemTime } from "../lib/date";
 
 type FinanceState = {
@@ -90,7 +111,8 @@ type FinanceState = {
   setPockets: (pockets: Pocket[]) => void;
   goalsWalletPrompted: boolean;
   markGoalsWalletPrompted: () => void;
-  transfer: (from: string, to: string, amount: number, goalId?: string, note?: string) => void;
+  addTransfer: (input: TransferInput) => TransferResult;
+  deleteTransfer: (id: string) => void;
   addTransaction: (txn: Transaction) => void;
   addTransactions: (txns: Transaction[]) => void;
   updateTransaction: (id: string, patch: Partial<Transaction>) => void;
@@ -155,9 +177,35 @@ function currentDay(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
+const MAX_TRANSFER_AMOUNT = 999_999_999_999;
+
+/** Atomic removal of a transfer: restores both pocket balances (including
+ *  any admin fee), deletes the fee expense, and unlinks goal savings rows
+ *  created from this transfer. Returns null when no transfer matches. */
+function transferRemoval(
+  state: Pick<FinanceState, "transactions" | "pockets" | "goalSavings">,
+  id: string
+): Pick<FinanceState, "transactions" | "pockets" | "goalSavings"> | null {
+  const t = state.transactions.find((x) => x.id === id && x.isTransfer);
+  if (!t) return null;
+  const feeTxn = t.adminFeeTransactionId
+    ? state.transactions.find((x) => x.id === t.adminFeeTransactionId)
+    : undefined;
+  const feeAmount = feeTxn?.isExpense ? feeTxn.amount : 0;
+  return {
+    transactions: state.transactions.filter((x) => x.id !== id && x.id !== t.adminFeeTransactionId),
+    pockets: state.pockets.map((p) => {
+      if (p.id === t.pocketId) return { ...p, balance: p.balance + t.amount + feeAmount };
+      if (p.id === t.transferToPocketId) return { ...p, balance: p.balance - t.amount };
+      return p;
+    }),
+    goalSavings: state.goalSavings.filter((s) => s.transferTransactionId !== t.id),
+  };
+}
+
 export const useFinanceStore = create<FinanceState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       pockets: INITIAL_POCKETS,
       transactions: [],
       budgets: SEED_BUDGETS,
@@ -182,31 +230,85 @@ export const useFinanceStore = create<FinanceState>()(
       setPockets: (pockets) => set({ pockets }),
       goalsWalletPrompted: false,
       markGoalsWalletPrompted: () => set({ goalsWalletPrompted: true }),
-      transfer: (from, to, amount, goalId, note) =>
-        set((state) => {
-          const txn: Transaction = {
-            id: `txn-${Date.now()}`,
-            name: note || "Transfer",
-            category: "Transfer",
-            amount: Math.round(amount),
-            isExpense: false,
-            isTransfer: true,
-            pocketId: from,
-            transferToPocketId: to,
-            time: getSystemTime(),
-            date: getSystemDate(),
-            note: note,
-            goalAllocation: goalId ? [{ goalId, amount: Math.round(amount) }] : undefined,
+      addTransfer: (input) => {
+        const { fromPocketId, toPocketId, amount, adminFee = 0, note, date, goalId, key } = input;
+
+        if (!Number.isInteger(amount) || amount <= 0 || amount > MAX_TRANSFER_AMOUNT) {
+          return { ok: false, error: "Amount must be a whole number between 1 and 999,999,999,999." };
+        }
+        if (fromPocketId === toPocketId) {
+          return { ok: false, error: "Source and destination wallets must be different." };
+        }
+        if (!Number.isInteger(adminFee) || adminFee < 0) {
+          return { ok: false, error: "Admin fee must be a whole number of 0 or more." };
+        }
+        if (typeof key !== "string" || key.trim() === "") {
+          return { ok: false, error: "An idempotency key is required." };
+        }
+        if (date !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+          return { ok: false, error: "Date must be YYYY-MM-DD." };
+        }
+
+        const state = get();
+        const from = state.pockets.find((p) => p.id === fromPocketId);
+        const to = state.pockets.find((p) => p.id === toPocketId);
+        if (!from || !to) {
+          return { ok: false, error: "Source or destination wallet not found." };
+        }
+        if (from.balance < 0 || amount + adminFee > from.balance) {
+          return { ok: false, error: "Amount plus admin fee exceeds the source wallet balance." };
+        }
+        // Idempotency: a second attempt with the same key returns the first result.
+        const existing = state.transactions.find((t) => t.transferKey === key);
+        if (existing) {
+          return { ok: true, txnId: existing.id, feeTxnId: existing.adminFeeTransactionId, duplicate: true };
+        }
+
+        const txnDate = date ?? getSystemDate();
+        const txnTime = getSystemTime();
+        const txn: Transaction = {
+          id: `txn-${Date.now()}-${Math.floor(Math.random() * 1e6)}`,
+          name: "Transfer",
+          category: "Transfer",
+          amount,
+          isExpense: false,
+          isTransfer: true,
+          transferKey: key,
+          pocketId: fromPocketId,
+          transferToPocketId: toPocketId,
+          time: txnTime,
+          date: txnDate,
+          note: note?.trim() || undefined,
+          goalAllocation: goalId ? [{ goalId, amount }] : undefined,
+        };
+        let feeTxn: Transaction | undefined;
+        if (adminFee > 0) {
+          feeTxn = {
+            id: `txn-${Date.now()}-${Math.floor(Math.random() * 1e6)}-fee`,
+            name: "Admin fee",
+            category: "Other",
+            amount: adminFee,
+            isExpense: true,
+            transferFeeOf: txn.id,
+            pocketId: fromPocketId,
+            time: txnTime,
+            date: txnDate,
           };
-          return {
-            transactions: [txn, ...state.transactions],
-            pockets: state.pockets.map((p) => {
-              if (p.id === from) return { ...p, balance: p.balance - txn.amount };
-              if (p.id === to) return { ...p, balance: p.balance + txn.amount };
-              return p;
-            }),
-          };
-        }),
+          txn.adminFeeTransactionId = feeTxn.id;
+        }
+        set((s) => ({
+          transactions: feeTxn ? [txn, feeTxn, ...s.transactions] : [txn, ...s.transactions],
+          pockets: s.pockets.map((p) => {
+            if (p.id === fromPocketId) return { ...p, balance: p.balance - (amount + adminFee) };
+            if (p.id === toPocketId) return { ...p, balance: p.balance + amount };
+            return p;
+          }),
+        }));
+        return { ok: true, txnId: txn.id, feeTxnId: feeTxn?.id, duplicate: false };
+      },
+
+      deleteTransfer: (id) =>
+        set((state) => transferRemoval(state, id) ?? state),
 
       addTransaction: (txn) => set((state) => ({ transactions: [txn, ...state.transactions] })),
       addTransactions: (txns) => set((state) => ({ transactions: [...txns, ...state.transactions] })),
@@ -222,18 +324,12 @@ export const useFinanceStore = create<FinanceState>()(
         set((state) => {
           const t = state.transactions.find((x) => x.id === id);
           if (!t) return state;
+          // Transfers fold fee restoration + goal unlink into one atomic update.
+          if (t.isTransfer) return transferRemoval(state, id) ?? state;
           const transactions = state.transactions.filter((x) => x.id !== id);
-          const pockets = state.pockets.map((p) => {
-            if (t.isTransfer) {
-              if (p.id === t.pocketId) return { ...p, balance: p.balance + t.amount };
-              if (p.id === t.transferToPocketId) return { ...p, balance: p.balance - t.amount };
-              return p;
-            } else {
-              return p.id === t.pocketId
-                ? { ...p, balance: p.balance + (t.isExpense ? t.amount : -t.amount) }
-                : p;
-            }
-          });
+          const pockets = state.pockets.map((p) =>
+            p.id === t.pocketId ? { ...p, balance: p.balance + (t.isExpense ? t.amount : -t.amount) } : p
+          );
           return { transactions, pockets };
         }),
       duplicateTransaction: (id) =>
@@ -243,12 +339,18 @@ export const useFinanceStore = create<FinanceState>()(
           const copy: Transaction = {
             ...src,
             id: `txn-${Date.now()}-${Math.floor(Math.random() * 1e6)}`,
+            transferKey: undefined, // a duplicate is a new send attempt
           };
-          const pockets = state.pockets.map((p) =>
-            p.id === copy.pocketId
+          const pockets = state.pockets.map((p) => {
+            if (src.isTransfer) {
+              if (p.id === copy.pocketId) return { ...p, balance: p.balance - copy.amount };
+              if (p.id === copy.transferToPocketId) return { ...p, balance: p.balance + copy.amount };
+              return p;
+            }
+            return p.id === copy.pocketId
               ? { ...p, balance: p.balance + (copy.isExpense ? -copy.amount : copy.amount) }
-              : p
-          );
+              : p;
+          });
           return { transactions: [copy, ...state.transactions], pockets };
         }),
       toggleStar: (id) =>

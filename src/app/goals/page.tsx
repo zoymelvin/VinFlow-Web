@@ -77,7 +77,7 @@ export default function GoalsPage() {
   const deleteGoal = useFinanceStore((s) => s.deleteGoal);
   const addGoalSaving = useFinanceStore((s) => s.addGoalSaving);
   const addTransaction = useFinanceStore((s) => s.addTransaction);
-  const transfer = useFinanceStore((s) => s.transfer);
+  const addTransfer = useFinanceStore((s) => s.addTransfer);
   const updatePocketBalance = useFinanceStore((s) => s.updatePocketBalance);
 
   const [mounted, setMounted] = useState(false);
@@ -285,14 +285,20 @@ export default function GoalsPage() {
       if (savingAmount > sourcePocket.balance) { setToast("Insufficient wallet balance."); return; }
 
       setSavingBusy(true);
-      // Transfer source → goal wallet, linked to goal
-      transfer(
-        savingPocketId,
-        goal.pocketId,
-        savingAmount,
-        goal.id,
-        savingNote.trim() || `Saved to ${goal.name}`
-      );
+      // Transfer source → goal wallet, linked to goal (atomic store action)
+      const res = addTransfer({
+        fromPocketId: savingPocketId,
+        toPocketId: goal.pocketId,
+        amount: savingAmount,
+        note: savingNote.trim() || `Saved to ${goal.name}`,
+        goalId: goal.id,
+        key: `gs-${goal.id}-${Date.now()}-${Math.floor(Math.random() * 1e6)}`,
+      });
+      if (!res.ok) {
+        setSavingBusy(false);
+        setToast(res.error);
+        return;
+      }
       addGoalSaving({
         id: `gs-${Date.now()}-${Math.floor(Math.random() * 1e6)}`,
         goalId: goal.id,
@@ -300,6 +306,7 @@ export default function GoalsPage() {
         pocketId: savingPocketId,
         date: savingDate,
         note: savingNote.trim() || `Saved to ${goal.name}`,
+        transferTransactionId: res.txnId,
       });
       setToast(`Saved ${formatIDR(savingAmount)} to ${goal.name}`);
     } else {
@@ -313,13 +320,19 @@ export default function GoalsPage() {
         if (!destPocket) { setToast("Wallet not found."); return; }
 
         setSavingBusy(true);
-        transfer(
-          goal.pocketId,
-          savingPocketId,
-          savingAmount,
-          goal.id,
-          savingNote.trim() || `Withdrawn from ${goal.name}`
-        );
+        const res = addTransfer({
+          fromPocketId: goal.pocketId,
+          toPocketId: savingPocketId,
+          amount: savingAmount,
+          note: savingNote.trim() || `Withdrawn from ${goal.name}`,
+          goalId: goal.id,
+          key: `gw-${goal.id}-${Date.now()}-${Math.floor(Math.random() * 1e6)}`,
+        });
+        if (!res.ok) {
+          setSavingBusy(false);
+          setToast(res.error);
+          return;
+        }
         addGoalSaving({
           id: `gs-${Date.now()}-${Math.floor(Math.random() * 1e6)}`,
           goalId: goal.id,
@@ -327,6 +340,7 @@ export default function GoalsPage() {
           pocketId: goal.pocketId,
           date: savingDate,
           note: savingNote.trim() || `Withdrawn from ${goal.name}`,
+          transferTransactionId: res.txnId,
         });
         setToast(`Withdrew ${formatIDR(savingAmount)} to wallet`);
       } else {

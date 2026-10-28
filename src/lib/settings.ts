@@ -34,15 +34,17 @@ export function validateName(name: string): string | null {
   return null;
 }
 
-/** IDR, no decimals. */
+/** IDR, no decimals. Zero renders "Rp 0"; fractional values round (IDR has
+ *  no sen); sub-1000 integers keep two decimals. */
 export function formatIDR(value: number): string {
-  const digits = value < 1000 ? 2 : 0;
+  const whole = Math.round(value);
+  const digits = whole === 0 ? 0 : whole < 1000 ? 2 : 0;
   return new Intl.NumberFormat("id-ID", {
     style: "currency",
     currency: "IDR",
     minimumFractionDigits: digits,
     maximumFractionDigits: digits,
-  }).format(value);
+  }).format(whole);
 }
 
 /** Money display honoring Hide Balance. Masked value never leaks digits. */
