@@ -2,15 +2,17 @@
 
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
+import { useRouter } from "next/navigation";
 import {
   Plus, Building, Smartphone, Wallet, Coins, CreditCard, LayoutGrid,
-  Trash2, X,
+  Trash2, X, ArrowLeftRight, ArrowRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Overlay, GrabHandle, Z } from "@/components/overlay";
 import { useFinanceStore, type Pocket } from "@/store/useFinanceStore";
 import Money from "@/components/Money";
+import Toast from "@/components/Toast";
 
 /* ── Data ────────────────────────────────────────────────── */
 const AVAILABLE_CATEGORIES = [
@@ -31,6 +33,8 @@ export default function PocketsPage() {
   const updatePocketBalance = useFinanceStore((s) => s.updatePocketBalance);
   const deletePocket = useFinanceStore((s) => s.deletePocket);
 
+  const router = useRouter();
+  const [toast, setToast] = useState<string | null>(null);
   const [hasMounted, setHasMounted] = useState(false);
 
   // Add drawer
@@ -88,6 +92,15 @@ export default function PocketsPage() {
     setOpenDetail(false);
   };
 
+  const handleTransferRow = () => {
+    if (pockets.length < 2) {
+      setToast("Add a second wallet to start transferring");
+      window.setTimeout(() => setToast(null), 2400);
+      return;
+    }
+    router.push("/transfer");
+  };
+
   return (
     <motion.main
       className="relative min-h-screen bg-background text-foreground pb-28 px-4 pt-4"
@@ -98,13 +111,40 @@ export default function PocketsPage() {
 
 
       {/* Header */}
-      <header className="relative mb-8">
+      <header className="relative mb-5">
         <h1 className="text-2xl font-bold tracking-tight text-white">My Wallets</h1>
         <p className="text-[11px] font-semibold uppercase tracking-widest text-white/40 mt-1 mb-2">
           {pockets.length} wallets
         </p>
         <div className="h-px bg-gradient-to-r from-blue-500/40 via-transparent to-transparent" />
       </header>
+
+      {/* Transfer row — deep-link to the transfer flow (needs 2+ wallets) */}
+      <div className="mb-4">
+        <button
+          type="button"
+          onClick={handleTransferRow}
+          aria-disabled={pockets.length < 2 || undefined}
+          className={cn(
+            "w-full rounded-[20px] border px-4 py-[14px] flex items-center gap-3 text-left outline-none transition-all",
+            "active:scale-[0.98]",
+            pockets.length < 2
+              ? "bg-[#121a2e]/50 border-[#25365f]/40 opacity-55 cursor-not-allowed"
+              : "bg-[#121a2e] border-[#25365f] hover:bg-[#141c33]"
+          )}
+        >
+          <span className="w-10 h-10 rounded-[13px] bg-[var(--primary-glow-sm)] border border-[#25365f] flex items-center justify-center shrink-0">
+            <ArrowLeftRight className="w-5 h-5 text-accent" strokeWidth={2} aria-hidden="true" />
+          </span>
+          <span className="flex-1 min-w-0">
+            <span className="block text-[15px] font-semibold text-white">Transfer</span>
+            <span className="block text-xs text-muted-foreground mt-0.5">
+              {pockets.length < 2 ? "Add a second wallet to start transferring" : "Move money between wallets"}
+            </span>
+          </span>
+          <ArrowRight className="w-5 h-5 text-accent shrink-0" aria-hidden="true" />
+        </button>
+      </div>
 
       {/* Pocket Grid */}
       <section className="relative">
@@ -291,6 +331,8 @@ export default function PocketsPage() {
           );
         })()}
       </Overlay>
+
+      <Toast message={toast ?? ""} />
     </motion.main>
   );
 }

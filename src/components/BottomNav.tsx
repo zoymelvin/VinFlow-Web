@@ -37,6 +37,9 @@ export default function BottomNav() {
     return null;
   })();
 
+  // Transfer is a focused flow (pinned send button) — hide the tab bar there.
+  if (pathname.startsWith("/transfer")) return null;
+
   return (
     <nav
       aria-label="Main navigation"

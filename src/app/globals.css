@@ -151,15 +151,92 @@
    Typography — Tight tracking for headings
    ───────────────────────────────────────────── */
 @layer utilities {
+  /* Every animation lives inside prefers-reduced-motion: no-preference so
+   * reduced-motion users see final states instantly. Only transform and
+   * opacity are ever animated. */
   @media (prefers-reduced-motion: no-preference) {
     .animate-entrance {
       animation: entrance 260ms cubic-bezier(.2,.8,.2,1) backwards;
+    }
+    .animate-transfer-in {
+      animation: transfer-in 240ms cubic-bezier(.2,.8,.2,1) backwards;
+    }
+    .animate-card-in {
+      animation: card-in 240ms cubic-bezier(.2,.8,.2,1) backwards;
+    }
+    .animate-amount-pulse {
+      animation: amount-pulse 120ms ease-out;
+    }
+    .animate-msg-in {
+      animation: msg-in 150ms ease-out;
+    }
+    .animate-send-dim {
+      animation: send-dim 200ms ease-out;
+    }
+    .animate-check-in {
+      animation: check-in 200ms ease-out;
+    }
+    .animate-transfer-out {
+      animation: transfer-out 200ms ease-in forwards;
+    }
+    .animate-ring-fade {
+      animation: ring-fade 700ms ease-out;
+    }
+    .animate-after-fade {
+      animation: after-fade 120ms ease-out;
     }
   }
 
 @keyframes entrance {
   from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes transfer-in {
+  from { opacity: 0; transform: translateX(12px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes card-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes amount-pulse {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.03); }
+  100% { transform: scale(1); }
+}
+
+@keyframes msg-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes send-dim {
+  from { opacity: 1; }
+  to { opacity: 0.35; }
+}
+
+@keyframes check-in {
+  from { opacity: 0; transform: scale(0.8); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes transfer-out {
+  from { opacity: 1; transform: translateX(0); }
+  to { opacity: 0; transform: translateX(12px); }
+}
+
+@keyframes ring-fade {
+  0% { opacity: 0; }
+  25% { opacity: 0.9; }
+  100% { opacity: 0; }
+}
+
+@keyframes after-fade {
+  from { opacity: 0.3; }
+  to { opacity: 1; }
 }
 
 @keyframes draw {
