@@ -1,5 +1,5 @@
-import type { Pocket } from "@/store/useFinanceStore";
-import { formatIDR } from "@/lib/settings";
+import type { Pocket } from "../store/useFinanceStore";
+import { formatIDR } from "./settings";
 
 /* ── Shared limits ──────────────────────────────────── */
 export const MAX_AMOUNT = 999_999_999_999;
